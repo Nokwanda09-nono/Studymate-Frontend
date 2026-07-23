@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useEffect, useState } from "react";
 
 // Define User type
 interface User {
@@ -24,7 +24,7 @@ interface AuthContextType {
 }
 
 // API Base URL - change this to your backend URL
-const API_URL = 'http://10.7.20.255:5000/api';
+const API_URL = 'https://study-mate-v1-ten.vercel.app/api';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
