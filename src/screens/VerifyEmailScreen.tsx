@@ -73,7 +73,7 @@ export function VerifyEmailScreen() {
 
     setVerificationStatus('verifying');
     try {
-      const response = await fetch(`http://localhost:5000/api/verify-email?token=${verificationToken}`);
+      const response = await fetch(`htthttps://study-mate-v1-ten.vercel.app/api/verify-email?token=${verificationToken}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -123,7 +123,7 @@ export function VerifyEmailScreen() {
     setResendLoading(true);
     try {
       // Use your computer's IP address instead of localhost for mobile
-      const API_URL = 'http://192.168.1.x:5000/api'; // Replace with your IP
+      const API_URL = 'https://study-mate-v1-ten.vercel.app/api'; // Replace with your IP
       const response = await fetch(`${API_URL}/resend-verification`, {
         method: 'POST',
         headers: {
