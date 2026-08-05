@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
+import { useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   Alert,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import { useStore } from '../context/StoreContext';
-import { useAuth } from '../context/AuthContext';
-import { CustomButton } from '../components/CustomButton';
-import { CustomCard } from '../components/CustomCard';
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { CustomButton } from "../components/CustomButton";
+import { CustomCard } from "../components/CustomCard";
+import { useAuth } from "../context/AuthContext";
+import { useStore } from "../context/StoreContext";
 
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 10;
 
 export function OnboardingScreen() {
   const navigation = useNavigation();
@@ -23,13 +23,16 @@ export function OnboardingScreen() {
   const { completeOnboarding } = useAuth();
   const [step, setStep] = useState(1);
   const [profile, setProfileState] = useState({
-    studyHoursPerDay: undefined as number | undefined,
-    studyDaysPerWeek: undefined as number | undefined,
+    qualification: undefined as string | undefined,
+    year: undefined as string | undefined,
     academicGoal: undefined as string | undefined,
-    studyStyle: undefined as string | undefined,
-    fieldOfStudy: undefined as string | undefined,
-    academicLevel: undefined as string | undefined,
-    preferredStudyTime: undefined as string | undefined,
+    learningStyle: undefined as string | undefined,
+    studyChallenges: [] as string[],
+    studyHours: undefined as string | undefined,
+    productiveTime: undefined as string | undefined,
+    reminderFrequency: undefined as string | undefined,
+    aiSupport: undefined as string | undefined,
+    resourceRecommendations: undefined as string | undefined,
   });
 
   const handleNext = () => {
@@ -49,26 +52,47 @@ export function OnboardingScreen() {
   const handleComplete = async () => {
     setProfile(profile as any);
     await completeOnboarding();
-    Alert.alert('Success', 'Profile completed! Welcome to Study Mate!');
-    (navigation.navigate as any)('Main');
+    Alert.alert("Success", "Profile completed! Welcome to Study Mate!");
+    (navigation.navigate as any)("Main");
+  };
+
+  const toggleChallenge = (challenge: string) => {
+    const currentChallenges = profile.studyChallenges || [];
+    if (currentChallenges.includes(challenge)) {
+      setProfileState({
+        ...profile,
+        studyChallenges: currentChallenges.filter((c) => c !== challenge),
+      });
+    } else {
+      setProfileState({
+        ...profile,
+        studyChallenges: [...currentChallenges, challenge],
+      });
+    }
   };
 
   const canProceed = () => {
     switch (step) {
       case 1:
-        return profile.studyHoursPerDay !== undefined;
+        return profile.qualification !== undefined;
       case 2:
-        return profile.studyDaysPerWeek !== undefined;
+        return profile.year !== undefined;
       case 3:
         return profile.academicGoal !== undefined;
       case 4:
-        return profile.studyStyle !== undefined;
+        return profile.learningStyle !== undefined;
       case 5:
-        return profile.fieldOfStudy !== undefined;
+        return (profile.studyChallenges || []).length >= 2;
       case 6:
-        return profile.academicLevel !== undefined;
+        return profile.studyHours !== undefined;
       case 7:
-        return profile.preferredStudyTime !== undefined;
+        return profile.productiveTime !== undefined;
+      case 8:
+        return profile.reminderFrequency !== undefined;
+      case 9:
+        return profile.aiSupport !== undefined;
+      case 10:
+        return profile.resourceRecommendations !== undefined;
       default:
         return false;
     }
@@ -79,22 +103,38 @@ export function OnboardingScreen() {
       case 1:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>How many hours per day do you prefer to study?</Text>
-            <View style={styles.optionsGrid}>
-              {[1, 2, 3, 4, 5, 6].map((hours) => (
+            <Text style={styles.questionText}>
+              What qualification are you studying?
+            </Text>
+            <View style={styles.optionsList}>
+              {[
+                { value: "bachelor", label: "Bachelor's Degree" },
+                { value: "master", label: "Master's Degree" },
+                { value: "phd", label: "PhD" },
+                { value: "diploma", label: "Diploma" },
+                { value: "certificate", label: "Certificate" },
+                { value: "high-school", label: "High School" },
+                { value: "other", label: "Other" },
+              ].map((qual) => (
                 <TouchableOpacity
-                  key={hours}
+                  key={qual.value}
                   style={[
-                    styles.optionButton,
-                    profile.studyHoursPerDay === hours && styles.optionSelected,
+                    styles.listOption,
+                    profile.qualification === qual.value &&
+                      styles.optionSelected,
                   ]}
-                  onPress={() => setProfileState({ ...profile, studyHoursPerDay: hours })}
+                  onPress={() =>
+                    setProfileState({ ...profile, qualification: qual.value })
+                  }
                 >
-                  <Text style={[
-                    styles.optionText,
-                    profile.studyHoursPerDay === hours && styles.optionTextSelected,
-                  ]}>
-                    {hours} {hours === 1 ? 'hour' : 'hours'}
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.qualification === qual.value &&
+                        styles.optionTextSelected,
+                    ]}
+                  >
+                    {qual.label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -105,22 +145,34 @@ export function OnboardingScreen() {
       case 2:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>How many days per week do you study?</Text>
-            <View style={styles.optionsGrid}>
-              {[3, 4, 5, 6, 7].map((days) => (
+            <Text style={styles.questionText}>
+              What year are you currently in?
+            </Text>
+            <View style={styles.optionsList}>
+              {[
+                { value: "first", label: "First Year" },
+                { value: "second", label: "Second Year" },
+                { value: "third", label: "Third Year" },
+                { value: "fourth", label: "Fourth Year" },
+                { value: "postgraduate", label: "Postgraduate" },
+              ].map((year) => (
                 <TouchableOpacity
-                  key={days}
+                  key={year.value}
                   style={[
-                    styles.optionButton,
-                    profile.studyDaysPerWeek === days && styles.optionSelected,
+                    styles.listOption,
+                    profile.year === year.value && styles.optionSelected,
                   ]}
-                  onPress={() => setProfileState({ ...profile, studyDaysPerWeek: days })}
+                  onPress={() =>
+                    setProfileState({ ...profile, year: year.value })
+                  }
                 >
-                  <Text style={[
-                    styles.optionText,
-                    profile.studyDaysPerWeek === days && styles.optionTextSelected,
-                  ]}>
-                    {days} {days === 1 ? 'day' : 'days'} per week
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.year === year.value && styles.optionTextSelected,
+                    ]}
+                  >
+                    {year.label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -131,27 +183,34 @@ export function OnboardingScreen() {
       case 3:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>What is your primary academic goal?</Text>
+            <Text style={styles.questionText}>
+              What is your academic goal this semester?
+            </Text>
             <View style={styles.optionsList}>
               {[
-                { value: 'graduate', label: 'Graduate with honors' },
-                { value: 'improve', label: 'Improve current grades' },
-                { value: 'pass', label: 'Pass all courses' },
-                { value: 'master', label: 'Master specific subjects' },
-                { value: 'exam', label: 'Prepare for exams' },
+                { value: "pass", label: "Pass all my modules" },
+                { value: "improve", label: "Improve my grades" },
+                { value: "distinctions", label: "Achieve distinctions" },
+                { value: "graduate", label: "Graduate this year" },
               ].map((goal) => (
                 <TouchableOpacity
                   key={goal.value}
                   style={[
                     styles.listOption,
-                    profile.academicGoal === goal.value && styles.optionSelected,
+                    profile.academicGoal === goal.value &&
+                      styles.optionSelected,
                   ]}
-                  onPress={() => setProfileState({ ...profile, academicGoal: goal.value })}
+                  onPress={() =>
+                    setProfileState({ ...profile, academicGoal: goal.value })
+                  }
                 >
-                  <Text style={[
-                    styles.optionText,
-                    profile.academicGoal === goal.value && styles.optionTextSelected,
-                  ]}>
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.academicGoal === goal.value &&
+                        styles.optionTextSelected,
+                    ]}
+                  >
                     {goal.label}
                   </Text>
                 </TouchableOpacity>
@@ -163,28 +222,50 @@ export function OnboardingScreen() {
       case 4:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>{"What's your preferred study style?"}</Text>
+            <Text style={styles.questionText}>How do you learn best?</Text>
             <View style={styles.optionsList}>
               {[
-                { value: 'visual', label: 'Visual (diagrams, charts, images)', icon: 'eye' },
-                { value: 'auditory', label: 'Auditory (lectures, discussions)', icon: 'headset' },
-                { value: 'reading', label: 'Reading/Writing (notes, textbooks)', icon: 'book' },
-                { value: 'kinesthetic', label: 'Kinesthetic (hands-on, practice)', icon: 'fitness' },
+                { value: "reading", label: "Reading notes", icon: "book" },
+                { value: "videos", label: "Watching videos", icon: "videocam" },
+                {
+                  value: "practice",
+                  label: "Practice questions",
+                  icon: "fitness",
+                },
+                {
+                  value: "combination",
+                  label: "A combination of all",
+                  icon: "sync",
+                },
               ].map((style) => (
                 <TouchableOpacity
                   key={style.value}
                   style={[
                     styles.listOption,
-                    profile.studyStyle === style.value && styles.optionSelected,
+                    profile.learningStyle === style.value &&
+                      styles.optionSelected,
                   ]}
-                  onPress={() => setProfileState({ ...profile, studyStyle: style.value })}
+                  onPress={() =>
+                    setProfileState({ ...profile, learningStyle: style.value })
+                  }
                 >
-                  <Ionicons name={style.icon as any} size={24} color={profile.studyStyle === style.value ? '#6366f1' : '#9ca3af'} />
-                  <Text style={[
-                    styles.optionText,
-                    profile.studyStyle === style.value && styles.optionTextSelected,
-                    { marginLeft: 12, flex: 1 }
-                  ]}>
+                  <Ionicons
+                    name={style.icon as any}
+                    size={24}
+                    color={
+                      profile.learningStyle === style.value
+                        ? "#6366f1"
+                        : "#9ca3af"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.learningStyle === style.value &&
+                        styles.optionTextSelected,
+                      { marginLeft: 12, flex: 1 },
+                    ]}
+                  >
                     {style.label}
                   </Text>
                 </TouchableOpacity>
@@ -196,35 +277,74 @@ export function OnboardingScreen() {
       case 5:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>What is your field of study?</Text>
+            <Text style={styles.questionText}>
+              What is your biggest study challenge? (Select 2 or more)
+            </Text>
+            <Text style={styles.subtext}>Select at least 2 options</Text>
             <View style={styles.optionsList}>
               {[
-                { value: 'computer-science', label: 'Computer Science' },
-                { value: 'engineering', label: 'Engineering' },
-                { value: 'business', label: 'Business' },
-                { value: 'medicine', label: 'Medicine' },
-                { value: 'law', label: 'Law' },
-                { value: 'arts', label: 'Arts & Humanities' },
-                { value: 'sciences', label: 'Natural Sciences' },
-                { value: 'social-sciences', label: 'Social Sciences' },
-                { value: 'other', label: 'Other' },
-              ].map((field) => (
-                <TouchableOpacity
-                  key={field.value}
-                  style={[
-                    styles.listOption,
-                    profile.fieldOfStudy === field.value && styles.optionSelected,
-                  ]}
-                  onPress={() => setProfileState({ ...profile, fieldOfStudy: field.value })}
-                >
-                  <Text style={[
-                    styles.optionText,
-                    profile.fieldOfStudy === field.value && styles.optionTextSelected,
-                  ]}>
-                    {field.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                {
+                  value: "time-management",
+                  label: "Time management",
+                  icon: "time",
+                },
+                {
+                  value: "understanding",
+                  label: "Understanding difficult concepts",
+                  icon: "bulb",
+                },
+                {
+                  value: "remembering",
+                  label: "Remembering information",
+                  icon: "brain",
+                },
+                {
+                  value: "motivation",
+                  label: "Staying motivated",
+                  icon: "flame",
+                },
+                {
+                  value: "exam-anxiety",
+                  label: "Exam anxiety",
+                  icon: "alert-circle",
+                },
+              ].map((challenge) => {
+                const isSelected = (profile.studyChallenges || []).includes(
+                  challenge.value,
+                );
+                return (
+                  <TouchableOpacity
+                    key={challenge.value}
+                    style={[
+                      styles.listOption,
+                      isSelected && styles.optionSelected,
+                    ]}
+                    onPress={() => toggleChallenge(challenge.value)}
+                  >
+                    <Ionicons
+                      name={challenge.icon as any}
+                      size={24}
+                      color={isSelected ? "#6366f1" : "#9ca3af"}
+                    />
+                    <Text
+                      style={[
+                        styles.optionText,
+                        isSelected && styles.optionTextSelected,
+                        { marginLeft: 12, flex: 1 },
+                      ]}
+                    >
+                      {challenge.label}
+                    </Text>
+                    {isSelected && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={24}
+                        color="#6366f1"
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         );
@@ -232,27 +352,34 @@ export function OnboardingScreen() {
       case 6:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>What is your current academic level?</Text>
+            <Text style={styles.questionText}>
+              How many hours can you realistically study each day?
+            </Text>
             <View style={styles.optionsList}>
               {[
-                { value: 'high-school', label: 'High School' },
-                { value: 'undergraduate', label: 'Undergraduate' },
-                { value: 'graduate', label: 'Graduate' },
-                { value: 'phd', label: 'PhD' },
-              ].map((level) => (
+                { value: "less-than-1", label: "Less than 1 hour" },
+                { value: "1-2", label: "1–2 hours" },
+                { value: "2-4", label: "2–4 hours" },
+                { value: "more-than-4", label: "More than 4 hours" },
+              ].map((hours) => (
                 <TouchableOpacity
-                  key={level.value}
+                  key={hours.value}
                   style={[
                     styles.listOption,
-                    profile.academicLevel === level.value && styles.optionSelected,
+                    profile.studyHours === hours.value && styles.optionSelected,
                   ]}
-                  onPress={() => setProfileState({ ...profile, academicLevel: level.value })}
+                  onPress={() =>
+                    setProfileState({ ...profile, studyHours: hours.value })
+                  }
                 >
-                  <Text style={[
-                    styles.optionText,
-                    profile.academicLevel === level.value && styles.optionTextSelected,
-                  ]}>
-                    {level.label}
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.studyHours === hours.value &&
+                        styles.optionTextSelected,
+                    ]}
+                  >
+                    {hours.label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -263,29 +390,224 @@ export function OnboardingScreen() {
       case 7:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>When do you prefer to study?</Text>
+            <Text style={styles.questionText}>
+              When are you usually most productive?
+            </Text>
             <View style={styles.optionsList}>
               {[
-                { value: 'morning', label: 'Morning (6 AM - 12 PM)', icon: 'sunny' },
-                { value: 'afternoon', label: 'Afternoon (12 PM - 6 PM)', icon: 'sunny-outline' },
-                { value: 'evening', label: 'Evening (6 PM - 10 PM)', icon: 'moon' },
-                { value: 'night', label: 'Night (10 PM - 2 AM)', icon: 'moon-outline' },
+                {
+                  value: "morning",
+                  label: "Morning (6 AM - 12 PM)",
+                  icon: "sunny",
+                },
+                {
+                  value: "afternoon",
+                  label: "Afternoon (12 PM - 4 PM)",
+                  icon: "sunny-outline",
+                },
+                {
+                  value: "evening",
+                  label: "Evening (4 PM - 9 PM)",
+                  icon: "moon",
+                },
+                {
+                  value: "late-night",
+                  label: "Late night (9 PM - 2 AM)",
+                  icon: "moon-outline",
+                },
               ].map((time) => (
                 <TouchableOpacity
                   key={time.value}
                   style={[
                     styles.listOption,
-                    profile.preferredStudyTime === time.value && styles.optionSelected,
+                    profile.productiveTime === time.value &&
+                      styles.optionSelected,
                   ]}
-                  onPress={() => setProfileState({ ...profile, preferredStudyTime: time.value })}
+                  onPress={() =>
+                    setProfileState({ ...profile, productiveTime: time.value })
+                  }
                 >
-                  <Ionicons name={time.icon as any} size={24} color={profile.preferredStudyTime === time.value ? '#6366f1' : '#9ca3af'} />
-                  <Text style={[
-                    styles.optionText,
-                    profile.preferredStudyTime === time.value && styles.optionTextSelected,
-                    { marginLeft: 12 }
-                  ]}>
+                  <Ionicons
+                    name={time.icon as any}
+                    size={24}
+                    color={
+                      profile.productiveTime === time.value
+                        ? "#6366f1"
+                        : "#9ca3af"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.productiveTime === time.value &&
+                        styles.optionTextSelected,
+                      { marginLeft: 12 },
+                    ]}
+                  >
                     {time.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        );
+
+      case 8:
+        return (
+          <View style={styles.stepContainer}>
+            <Text style={styles.questionText}>
+              How often would you like Study Mate to remind you to study?
+            </Text>
+            <View style={styles.optionsList}>
+              {[
+                { value: "every-day", label: "Every day" },
+                { value: "every-two-days", label: "Every two days" },
+                { value: "twice-week", label: "Twice a week" },
+                { value: "once-week", label: "Once a week" },
+                {
+                  value: "before-assessments",
+                  label: "Only before assessments",
+                },
+              ].map((freq) => (
+                <TouchableOpacity
+                  key={freq.value}
+                  style={[
+                    styles.listOption,
+                    profile.reminderFrequency === freq.value &&
+                      styles.optionSelected,
+                  ]}
+                  onPress={() =>
+                    setProfileState({
+                      ...profile,
+                      reminderFrequency: freq.value,
+                    })
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.reminderFrequency === freq.value &&
+                        styles.optionTextSelected,
+                    ]}
+                  >
+                    {freq.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        );
+
+      case 9:
+        return (
+          <View style={styles.stepContainer}>
+            <Text style={styles.questionText}>
+              What type of support would you like from the AI?
+            </Text>
+            <View style={styles.optionsList}>
+              {[
+                {
+                  value: "explain",
+                  label: "Explain difficult concepts",
+                  icon: "school",
+                },
+                {
+                  value: "summarize",
+                  label: "Summarize notes",
+                  icon: "document-text",
+                },
+                {
+                  value: "quizzes",
+                  label: "Generate quizzes",
+                  icon: "help-circle",
+                },
+                {
+                  value: "study-plans",
+                  label: "Recommend study plans",
+                  icon: "calendar",
+                },
+                { value: "all", label: "All of the above", icon: "apps" },
+              ].map((support) => (
+                <TouchableOpacity
+                  key={support.value}
+                  style={[
+                    styles.listOption,
+                    profile.aiSupport === support.value &&
+                      styles.optionSelected,
+                  ]}
+                  onPress={() =>
+                    setProfileState({ ...profile, aiSupport: support.value })
+                  }
+                >
+                  <Ionicons
+                    name={support.icon as any}
+                    size={24}
+                    color={
+                      profile.aiSupport === support.value
+                        ? "#6366f1"
+                        : "#9ca3af"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.aiSupport === support.value &&
+                        styles.optionTextSelected,
+                      { marginLeft: 12, flex: 1 },
+                    ]}
+                  >
+                    {support.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        );
+
+      case 10:
+        return (
+          <View style={styles.stepContainer}>
+            <Text style={styles.questionText}>
+              Would you like Study Mate to recommend learning resources such as
+              YouTube videos when you need extra help?
+            </Text>
+            <View style={styles.optionsList}>
+              {[
+                { value: "yes", label: "Yes", icon: "checkmark-circle" },
+                { value: "no", label: "No", icon: "close-circle" },
+              ].map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.listOption,
+                    profile.resourceRecommendations === option.value &&
+                      styles.optionSelected,
+                  ]}
+                  onPress={() =>
+                    setProfileState({
+                      ...profile,
+                      resourceRecommendations: option.value,
+                    })
+                  }
+                >
+                  <Ionicons
+                    name={option.icon as any}
+                    size={24}
+                    color={
+                      profile.resourceRecommendations === option.value
+                        ? "#6366f1"
+                        : "#9ca3af"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.resourceRecommendations === option.value &&
+                        styles.optionTextSelected,
+                      { marginLeft: 12 },
+                    ]}
+                  >
+                    {option.label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -301,21 +623,25 @@ export function OnboardingScreen() {
   const progress = (step / TOTAL_STEPS) * 100;
 
   return (
-    <LinearGradient colors={['#eef2ff', '#fae8ff']} style={styles.container}>
+    <LinearGradient colors={["#eef2ff", "#fae8ff"]} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <CustomCard style={styles.card}>
           <View style={styles.iconContainer}>
             <Ionicons name="school" size={40} color="white" />
           </View>
-          
+
           <Text style={styles.title}>{"Let's Get to Know You"}</Text>
-          <Text style={styles.subtitle}>Help us personalize your study experience</Text>
+          <Text style={styles.subtitle}>
+            Help us personalize your study experience
+          </Text>
 
           <View style={styles.progressContainer}>
             <View style={styles.progressBar}>
               <View style={[styles.progressFill, { width: `${progress}%` }]} />
             </View>
-            <Text style={styles.progressText}>Step {step} of {TOTAL_STEPS}</Text>
+            <Text style={styles.progressText}>
+              Step {step} of {TOTAL_STEPS}
+            </Text>
           </View>
 
           {renderStepContent()}
@@ -347,7 +673,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     padding: 16,
   },
   card: {
@@ -357,23 +683,23 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#6366f1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
+    backgroundColor: "#6366f1",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
     marginBottom: 16,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
-    textAlign: 'center',
+    fontWeight: "bold",
+    color: "#111827",
+    textAlign: "center",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
+    color: "#6b7280",
+    textAlign: "center",
     marginBottom: 24,
   },
   progressContainer: {
@@ -381,19 +707,19 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 8,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: "#e5e7eb",
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   progressFill: {
-    height: '100%',
-    backgroundColor: '#6366f1',
+    height: "100%",
+    backgroundColor: "#6366f1",
     borderRadius: 4,
   },
   progressText: {
     fontSize: 12,
-    color: '#6b7280',
-    textAlign: 'center',
+    color: "#6b7280",
+    textAlign: "center",
     marginTop: 8,
   },
   stepContainer: {
@@ -401,13 +727,19 @@ const styles = StyleSheet.create({
   },
   questionText: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 20,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  subtext: {
+    fontSize: 14,
+    color: "#6b7280",
+    marginBottom: 16,
+    fontStyle: "italic",
   },
   optionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
   optionsList: {
@@ -417,41 +749,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: "#e5e7eb",
     borderRadius: 8,
-    backgroundColor: '#f9fafb',
+    backgroundColor: "#f9fafb",
   },
   listOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: "#e5e7eb",
     borderRadius: 8,
-    backgroundColor: '#f9fafb',
+    backgroundColor: "#f9fafb",
   },
   optionSelected: {
-    borderColor: '#6366f1',
-    backgroundColor: '#eef2ff',
+    borderColor: "#6366f1",
+    backgroundColor: "#eef2ff",
   },
   optionText: {
     fontSize: 16,
-    color: '#374151',
+    color: "#374151",
   },
   optionTextSelected: {
-    color: '#6366f1',
-    fontWeight: '500',
+    color: "#6366f1",
+    fontWeight: "500",
   },
   navigationButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     gap: 12,
     marginTop: 24,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: "#e5e7eb",
   },
   navButton: {
     flex: 1,
   },
-});
+});
