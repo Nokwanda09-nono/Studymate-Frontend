@@ -18,7 +18,7 @@ import { useStore } from "../context/StoreContext";
 const TOTAL_STEPS = 10;
 
 export function OnboardingScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { setProfile } = useStore();
   const { completeOnboarding } = useAuth();
   const [step, setStep] = useState(1);
@@ -50,10 +50,26 @@ export function OnboardingScreen() {
   };
 
   const handleComplete = async () => {
-    setProfile(profile as any);
-    await completeOnboarding();
-    Alert.alert("Success", "Profile completed! Welcome to Study Mate!");
-    (navigation.navigate as any)("Main");
+    try {
+      setProfile(profile as any);
+      await completeOnboarding();
+      Alert.alert("Success", "Profile completed! Welcome to Study Mate!", [
+        {
+          text: "OK",
+          onPress: () => {
+            // Reset navigation and navigate to the main screen
+            // Using reset instead of navigate to prevent going back to onboarding
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "Main" }],
+            });
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error("Error completing onboarding:", error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    }
   };
 
   const toggleChallenge = (challenge: string) => {
