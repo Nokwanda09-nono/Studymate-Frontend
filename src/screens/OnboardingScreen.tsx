@@ -3,6 +3,7 @@ import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
@@ -17,22 +18,36 @@ import { useStore } from "../context/StoreContext";
 
 const TOTAL_STEPS = 10;
 
+interface OnboardingProfile {
+  qualification: string;
+  year: string;
+  academicGoal: string;
+  learningStyle: string;
+  studyChallenges: string[];
+  studyHours: string;
+  productiveTime: string;
+  reminderFrequency: string;
+  aiSupport: string;
+  resourceRecommendations: string;
+}
+
 export function OnboardingScreen() {
   const navigation = useNavigation();
   const { setProfile } = useStore();
-  const { completeOnboarding } = useAuth();
+  const { saveOnboardingProfile, user } = useAuth();
   const [step, setStep] = useState(1);
-  const [profile, setProfileState] = useState({
-    qualification: undefined as string | undefined,
-    year: undefined as string | undefined,
-    academicGoal: undefined as string | undefined,
-    learningStyle: undefined as string | undefined,
-    studyChallenges: [] as string[],
-    studyHours: undefined as string | undefined,
-    productiveTime: undefined as string | undefined,
-    reminderFrequency: undefined as string | undefined,
-    aiSupport: undefined as string | undefined,
-    resourceRecommendations: undefined as string | undefined,
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [profile, setProfileState] = useState<OnboardingProfile>({
+    qualification: "",
+    year: "",
+    academicGoal: "",
+    learningStyle: "",
+    studyChallenges: [],
+    studyHours: "",
+    productiveTime: "",
+    reminderFrequency: "",
+    aiSupport: "",
+    resourceRecommendations: "",
   });
 
   const handleNext = () => {
@@ -50,10 +65,39 @@ export function OnboardingScreen() {
   };
 
   const handleComplete = async () => {
-    setProfile(profile as any);
-    await completeOnboarding();
-    Alert.alert("Success", "Profile completed! Welcome to Study Mate!");
-    (navigation.navigate as any)("Main");
+    try {
+      setIsSubmitting(true);
+      
+      // Save profile to the server
+      await saveOnboardingProfile(profile);
+      
+      // Also save to local store if needed
+      setProfile(profile as any);
+      
+      Alert.alert(
+        "Success!",
+        "Your profile has been saved. Welcome to Study Mate!",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "Main" }],
+              });
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error("Onboarding error:", error);
+      Alert.alert(
+        "Error",
+        error.message || "Failed to complete onboarding. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const toggleChallenge = (challenge: string) => {
@@ -74,25 +118,25 @@ export function OnboardingScreen() {
   const canProceed = () => {
     switch (step) {
       case 1:
-        return profile.qualification !== undefined;
+        return profile.qualification !== "";
       case 2:
-        return profile.year !== undefined;
+        return profile.year !== "";
       case 3:
-        return profile.academicGoal !== undefined;
+        return profile.academicGoal !== "";
       case 4:
-        return profile.learningStyle !== undefined;
+        return profile.learningStyle !== "";
       case 5:
         return (profile.studyChallenges || []).length >= 2;
       case 6:
-        return profile.studyHours !== undefined;
+        return profile.studyHours !== "";
       case 7:
-        return profile.productiveTime !== undefined;
+        return profile.productiveTime !== "";
       case 8:
-        return profile.reminderFrequency !== undefined;
+        return profile.reminderFrequency !== "";
       case 9:
-        return profile.aiSupport !== undefined;
+        return profile.aiSupport !== "";
       case 10:
-        return profile.resourceRecommendations !== undefined;
+        return profile.resourceRecommendations !== "";
       default:
         return false;
     }
@@ -296,7 +340,7 @@ export function OnboardingScreen() {
                 {
                   value: "remembering",
                   label: "Remembering information",
-                  icon: "brain",
+                  icon: "extension-puzzle",
                 },
                 {
                   value: "motivation",
@@ -651,16 +695,24 @@ export function OnboardingScreen() {
               title="Back"
               variant="outline"
               onPress={handleBack}
-              disabled={step === 1}
+              disabled={step === 1 || isSubmitting}
               style={styles.navButton}
             />
             <CustomButton
               title={step === TOTAL_STEPS ? "Complete" : "Next"}
               onPress={handleNext}
-              disabled={!canProceed()}
+              disabled={!canProceed() || isSubmitting}
+              loading={isSubmitting && step === TOTAL_STEPS}
               style={styles.navButton}
             />
           </View>
+
+          {isSubmitting && (
+            <View style={styles.submittingContainer}>
+              <ActivityIndicator size="small" color="#6366f1" />
+              <Text style={styles.submittingText}>Saving your profile...</Text>
+            </View>
+          )}
         </CustomCard>
       </ScrollView>
     </LinearGradient>
@@ -737,21 +789,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontStyle: "italic",
   },
-  optionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
   optionsList: {
     gap: 12,
-  },
-  optionButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 8,
-    backgroundColor: "#f9fafb",
   },
   listOption: {
     flexDirection: "row",
@@ -785,5 +824,17 @@ const styles = StyleSheet.create({
   },
   navButton: {
     flex: 1,
+  },
+  submittingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 16,
+    padding: 8,
+  },
+  submittingText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: "#6b7280",
   },
 });

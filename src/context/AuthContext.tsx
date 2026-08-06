@@ -9,6 +9,22 @@ interface User {
   lastName?: string;
   emailVerified: boolean;
   onboardingCompleted?: boolean;
+  profile?: OnboardingProfile | null;
+}
+
+interface OnboardingProfile {
+  qualification: string;
+  year: string;
+  academicGoal: string;
+  learningStyle: string;
+  studyChallenges: string[];
+  studyHours: string;
+  productiveTime: string;
+  reminderFrequency: string;
+  aiSupport: string;
+  resourceRecommendations: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface AuthContextType {
@@ -19,8 +35,10 @@ interface AuthContextType {
   logout: () => Promise<void>;
   verifyEmail: (token: string) => Promise<void>;
   resendVerification: (email: string) => Promise<void>;
-  completeOnboarding: () => Promise<void>;
+  completeOnboarding: (profileData: OnboardingProfile) => Promise<void>;
   updateUser: (userData: Partial<User>) => Promise<void>;
+  saveOnboardingProfile: (profileData: OnboardingProfile) => Promise<void>;
+  getOnboardingProfile: () => Promise<OnboardingProfile | null>;
 }
 
 // API Base URL - change this to your backend URL
@@ -82,7 +100,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const data = await response.json();
 
       if (!response.ok) {
-        // Create an error with additional properties
         const error = new Error(data.error || 'Login failed');
         (error as any).requiresVerification = data.requiresVerification || false;
         (error as any).statusCode = response.status;
@@ -117,10 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         throw new Error(data.error || 'Registration failed');
       }
 
-      // Don't auto-login after registration, user needs to verify email
-      // But we can store the user data temporarily if needed
       if (data.user) {
-        // Store user data but not logged in state
         await AsyncStorage.setItem('pendingVerificationEmail', email);
       }
 
@@ -140,14 +154,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         throw new Error(data.error || 'Email verification failed');
       }
 
-      // Update user if already logged in
       if (user) {
         const updatedUser = { ...user, emailVerified: true };
         await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
         setUser(updatedUser);
       }
 
-      // Clear pending verification email
       await AsyncStorage.removeItem('pendingVerificationEmail');
 
       return data;
@@ -182,7 +194,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Logout function
   const logout = async () => {
     try {
-      // Clear stored data
       await AsyncStorage.removeItem('authToken');
       await AsyncStorage.removeItem('userData');
       await AsyncStorage.removeItem('pendingVerificationEmail');
@@ -195,7 +206,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  // Complete onboarding
+  // Save onboarding profile to server
+  const saveOnboardingProfile = async (profileData: OnboardingProfile) => {
+    try {
+      const response = await authenticatedFetch('/onboarding', {
+        method: 'POST',
+        body: JSON.stringify(profileData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save onboarding profile');
+      }
+
+      // Update user data with onboarding status and profile
+      if (user) {
+        const updatedUser = { 
+          ...user, 
+          onboardingCompleted: true,
+          profile: profileData
+        };
+        await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error saving onboarding profile:', error);
+      throw error;
+    }
+  };
+
+  // Get onboarding profile from server
+  const getOnboardingProfile = async (): Promise<OnboardingProfile | null> => {
+    try {
+      const response = await authenticatedFetch('/onboarding');
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null; // No profile found
+        }
+        throw new Error('Failed to fetch onboarding profile');
+      }
+
+      const data = await response.json();
+      return data.profile;
+    } catch (error) {
+      console.error('Error fetching onboarding profile:', error);
+      return null;
+    }
+  };
+
+  // Complete onboarding (legacy method - use saveOnboardingProfile instead)
   const completeOnboarding = async () => {
     if (user) {
       const updatedUser = { ...user, onboardingCompleted: true };
@@ -213,17 +276,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  // Check if user is authenticated
-  const isAuthenticated = async (): Promise<boolean> => {
-    const token = await AsyncStorage.getItem('authToken');
-    return !!token && !!user;
-  };
-
-  // Get current user's token
-  const getToken = async (): Promise<string | null> => {
-    return await AsyncStorage.getItem('authToken');
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -236,6 +288,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         resendVerification,
         completeOnboarding,
         updateUser,
+        saveOnboardingProfile,
+        getOnboardingProfile,
       }}
     >
       {children}

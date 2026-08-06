@@ -1,35 +1,56 @@
-import React, { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { NavigationProp, useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
   TouchableOpacity,
-  Alert,
-  ActivityIndicator,
+  View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, NavigationProp } from '@react-navigation/native';
-import { useAuth } from '../context/AuthContext';
 import { CustomButton } from '../components/CustomButton';
+import { useAuth } from '../context/AuthContext';
 
 type RootStackParamList = {
   Register: undefined;
   VerifyEmail: { email: string };
+  Onboarding: undefined;
+  Main: undefined;
 };
 
 export function LoginScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
-  const { login, resendVerification } = useAuth();
+  const { login, resendVerification, user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
+
+  // Check if user is already authenticated and redirect accordingly
+  useEffect(() => {
+    if (!authLoading && user) {
+      // Check if user has completed onboarding
+      const hasCompletedOnboarding = user.onboardingCompleted || false;
+      if (hasCompletedOnboarding) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Main' }],
+        });
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Onboarding' }],
+        });
+      }
+    }
+  }, [authLoading, user, navigation]);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -40,10 +61,12 @@ export function LoginScreen() {
     setLoading(true);
     try {
       await login(email, password);
-      // If login successful, navigation will be handled by auth context
+      
+      // After successful login, the useEffect will handle navigation
+      // based on onboarding status
     } catch (error: any) {
       // Check if the error is due to unverified email
-      if (error.message?.includes('verify your email') || error.requiresVerification) {
+      if (error.requiresVerification || error.message?.includes('verify your email')) {
         Alert.alert(
           'Email Not Verified',
           'Please verify your email before logging in. Would you like to resend the verification email?',
@@ -171,15 +194,6 @@ export function LoginScreen() {
               <Text style={styles.dividerText}>or</Text>
               <View style={styles.divider} />
             </View>
-
-            <TouchableOpacity 
-              style={styles.quickRegisterButton}
-              onPress={() => navigation.navigate('Register')}
-              disabled={loading}
-            >
-              <Ionicons name="person-add-outline" size={20} color="#6366f1" />
-              <Text style={styles.quickRegisterText}>Create New Account</Text>
-            </TouchableOpacity>
 
             <View style={styles.registerContainer}>
               <Text style={styles.registerText}>Don't have an account? </Text>
