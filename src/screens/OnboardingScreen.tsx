@@ -32,7 +32,7 @@ interface OnboardingProfile {
 }
 
 export function OnboardingScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { setProfile } = useStore();
   const { saveOnboardingProfile, user } = useAuth();
   const [step, setStep] = useState(1);
@@ -65,39 +65,10 @@ export function OnboardingScreen() {
   };
 
   const handleComplete = async () => {
-    try {
-      setIsSubmitting(true);
-      
-      // Save profile to the server
-      await saveOnboardingProfile(profile);
-      
-      // Also save to local store if needed
-      setProfile(profile as any);
-      
-      Alert.alert(
-        "Success!",
-        "Your profile has been saved. Welcome to Study Mate!",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: "Main" }],
-              });
-            },
-          },
-        ]
-      );
-    } catch (error: any) {
-      console.error("Onboarding error:", error);
-      Alert.alert(
-        "Error",
-        error.message || "Failed to complete onboarding. Please try again."
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+    setProfile(profile as any);
+    await completeOnboarding();
+    Alert.alert("Success", "Profile completed! Welcome to Study Mate!");
+    (navigation.navigate as any)("Main");
   };
 
   const toggleChallenge = (challenge: string) => {
