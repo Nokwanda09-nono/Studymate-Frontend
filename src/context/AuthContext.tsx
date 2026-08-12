@@ -35,13 +35,13 @@ interface AuthContextType {
   logout: () => Promise<void>;
   verifyEmail: (token: string) => Promise<void>;
   resendVerification: (email: string) => Promise<void>;
-  completeOnboarding: (profileData: OnboardingProfile) => Promise<void>;
+  completeOnboarding: () => Promise<void>;
   updateUser: (userData: Partial<User>) => Promise<void>;
   saveOnboardingProfile: (profileData: OnboardingProfile) => Promise<void>;
   getOnboardingProfile: () => Promise<OnboardingProfile | null>;
 }
 
-// API Base URL - change this to your backend URL
+// API Base URL
 const API_URL = 'https://study-mate-v1-ten.vercel.app/api';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -76,19 +76,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Helper function to make authenticated requests
   const authenticatedFetch = async (endpoint: string, options: RequestInit = {}) => {
     const token = await AsyncStorage.getItem('authToken');
-    return fetch(`${API_URL}${endpoint}`, {
+    
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const response = await fetch(`${API_URL}${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` }),
+        'Authorization': `Bearer ${token}`,
         ...options.headers,
       },
     });
+
+    // Log response status for debugging
+    console.log(`📡 ${options.method || 'GET'} ${endpoint} - Status:`, response.status);
+
+    const data = await response.json();
+    
+    // Log response data for debugging
+    console.log(`📦 Response data:`, data);
+
+    if (!response.ok) {
+      const errorMessage = data.error || data.message || 'Request failed';
+      throw new Error(errorMessage);
+    }
+
+    return data;
   };
 
   // Login function
   const login = async (email: string, password: string) => {
     try {
+      console.log('🔐 Attempting login for:', email);
+      
       const response = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: {
@@ -98,6 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       const data = await response.json();
+      console.log('📦 Login response:', data);
 
       if (!response.ok) {
         const error = new Error(data.error || 'Login failed');
@@ -112,7 +135,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       
       setAuthToken(data.token);
       setUser(data.user);
+      
+      console.log('✅ Login successful for:', data.user.email);
+      return data;
     } catch (error) {
+      console.error('❌ Login error:', error);
       throw error;
     }
   };
@@ -147,7 +174,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Verify email with token
   const verifyEmail = async (token: string) => {
     try {
-      const response = await fetch(`${API_URL}/verify-email?token=${token}`);
+      const response = await fetch(`${API_URL}/verify-code?token=${token}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -206,22 +233,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+
   // Save onboarding profile to server
   const saveOnboardingProfile = async (profileData: OnboardingProfile) => {
     try {
-      const response = await authenticatedFetch('/onboarding', {
+      console.log('📤 Saving onboarding profile...', profileData);
+      
+      const token = await AsyncStorage.getItem('authToken');
+      
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await fetch(`${API_URL}/onboarding`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify(profileData),
       });
 
-      const data = await response.json();
+      console.log('📡 POST /onboarding - Status:', response.status);
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to save onboarding profile');
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('❌ Failed to parse response:', parseError);
+        throw new Error('Invalid response from server');
       }
 
-      // Update user data with onboarding status and profile
-      if (user) {
+      console.log('📦 Response data:', data);
+
+      if (!response.ok) {
+        // Even if response is not OK, data might be saved in database
+        // So check if we have a success flag or if data exists
+        if (data.success) {
+          // It's actually successful despite the status code
+          console.log('⚠️ Response status was not OK but success flag is true');
+        } else {
+          const errorMessage = data.error || data.message || 'Request failed';
+          throw new Error(errorMessage);
+        }
+      }
+
+      console.log('✅ Onboarding profile saved successfully', data);
+
+      // Update user data with onboarding status
+      if (data.user) {
+        const updatedUser = { 
+          ...user, 
+          onboardingCompleted: true,
+          ...data.user
+        };
+        await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+      } else if (user) {
+        // Fallback: update user locally if server didn't return user data
         const updatedUser = { 
           ...user, 
           onboardingCompleted: true,
@@ -231,9 +300,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setUser(updatedUser);
       }
 
+      // Even if we got a 500 status, if the data was saved, we should consider it a success
+      if (response.status === 500 && data.profile) {
+        console.log('⚠️ Server returned 500 but profile was saved');
+        return data;
+      }
+
       return data;
-    } catch (error) {
-      console.error('Error saving onboarding profile:', error);
+    } catch (error: any) {
+      console.error('❌ Error saving onboarding profile:', error);
+      
+      // Log the full error for debugging
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+      });
+      
+      // Check if it's an authentication error
+      if (error.message.includes('session') || error.message.includes('token')) {
+        throw new Error('Your session has expired. Please login again.');
+      }
+      
       throw error;
     }
   };
@@ -241,24 +328,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Get onboarding profile from server
   const getOnboardingProfile = async (): Promise<OnboardingProfile | null> => {
     try {
-      const response = await authenticatedFetch('/onboarding');
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          return null; // No profile found
-        }
-        throw new Error('Failed to fetch onboarding profile');
+      const data = await authenticatedFetch('/onboarding');
+      return data.profile || null;
+    } catch (error: any) {
+      if (error.message.includes('404') || error.message.includes('not found')) {
+        return null; // No profile found
       }
-
-      const data = await response.json();
-      return data.profile;
-    } catch (error) {
       console.error('Error fetching onboarding profile:', error);
       return null;
     }
   };
 
-  // Complete onboarding (legacy method - use saveOnboardingProfile instead)
+  // Complete onboarding (legacy method)
   const completeOnboarding = async () => {
     if (user) {
       const updatedUser = { ...user, onboardingCompleted: true };

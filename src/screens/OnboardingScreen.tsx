@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
@@ -17,6 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 
 const TOTAL_STEPS = 10;
+const API_URL = "https://your-api-url.com";
 
 interface OnboardingProfile {
   qualification: string;
@@ -32,7 +34,7 @@ interface OnboardingProfile {
 }
 
 export function OnboardingScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
   const { setProfile } = useStore();
   const { saveOnboardingProfile, user } = useAuth();
   const [step, setStep] = useState(1);
@@ -65,11 +67,91 @@ export function OnboardingScreen() {
   };
 
   const handleComplete = async () => {
-    setProfile(profile as any);
-    await completeOnboarding();
-    Alert.alert("Success", "Profile completed! Welcome to Study Mate!");
-    (navigation.navigate as any)("Main");
+    // Validate all fields before submitting
+    if (!canProceed()) {
+      Alert.alert('Incomplete', 'Please complete all steps before submitting.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      
+      console.log('📤 Submitting onboarding profile...', profile);
+      
+      // Save profile to the server
+      const result = await saveOnboardingProfile(profile);
+      
+      console.log('✅ Onboarding completed successfully', result);
+      
+      // Also save to local store if needed
+      setProfile(profile as any);
+      
+      Alert.alert(
+        "Success! 🎉",
+        "Your profile has been saved. Welcome to Study Mate!",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              navigation.reset({
+                index: 0,
+                // Cast route to any to satisfy navigation.reset type expectations
+                routes: [{ name: "Main" } as any],
+              });
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error("❌ Onboarding error:", error);
+      
+      // Show the actual error message from the server
+      Alert.alert(
+        "Error",
+        error.message || "Failed to complete onboarding. Please try again.",
+        [
+          {
+            text: "OK",
+              onPress: () => {
+                // If it's a session error, redirect to login
+                if (error.message.includes('session') || error.message.includes('token')) {
+                  navigation.reset({
+                    index: 0,
+                    // Cast route to any to satisfy navigation.reset type expectations
+                    routes: [{ name: "Login" } as any],
+                  });
+                }
+              },
+          },
+        ]
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const debugDatabase = async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        console.log('No token found');
+        return;
+      }
+      
+      const response = await fetch(`${API_URL}/debug-user`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      console.log('Debug data:', data);
+    } catch (error) {
+      console.error('Debug error:', error);
+    }
+  };
+
+// Call this before submitting to check the database state
+// You can add a button or call it in useEffect
 
   const toggleChallenge = (challenge: string) => {
     const currentChallenges = profile.studyChallenges || [];
