@@ -41,18 +41,20 @@ export function ProfileScreen() {
   const { logout, user: authUser, updateUser } = useAuth();
   const { profile, setProfile } = useStore();
 
+  const userProf: any = authUser?.profile || profile || {};
+
   const [isEditing, setIsEditing] = useState(false);
   const [editedProfile, setEditedProfile] = useState<EditableProfile>({
     firstName: authUser?.firstName || "",
     lastName: authUser?.lastName || "",
-    academicLevel: profile?.academicLevel || "",
-    fieldOfStudy: profile?.fieldOfStudy || "",
-    academicGoal: profile?.academicGoal || "",
-    studyStyle: profile?.studyStyle || "",
-    studyHoursPerDay: String(profile?.studyHoursPerDay || ""),
-    studyDaysPerWeek: String(profile?.studyDaysPerWeek || ""),
-    preferredStudyTime: profile?.preferredStudyTime || "",
-    studyChallenges: [],
+    academicLevel: userProf.qualification || userProf.academicLevel || "",
+    fieldOfStudy: userProf.fieldOfStudy || "",
+    academicGoal: userProf.academicGoal || "",
+    studyStyle: userProf.learningStyle || userProf.studyStyle || "",
+    studyHoursPerDay: String(userProf.studyHours || userProf.studyHoursPerDay || ""),
+    studyDaysPerWeek: String(userProf.studyDaysPerWeek || ""),
+    preferredStudyTime: userProf.productiveTime || userProf.preferredStudyTime || "",
+    studyChallenges: userProf.studyChallenges || [],
   });
 
   const [showDropdown, setShowDropdown] = useState<string | null>(null);

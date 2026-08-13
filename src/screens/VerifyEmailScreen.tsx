@@ -16,30 +16,33 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAuth } from "../context/AuthContext";
 
 type RootStackParamList = {
   Login: undefined;
   VerifyEmail: {
     email: string;
   };
+  Home: undefined;
+  Onboarding: undefined;
 };
+
 export function VerifyEmailScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, "VerifyEmail">>();
+  const { verifyEmail, resendVerification } = useAuth();
 
-  const { email } = route.params;
+  const email = route.params?.email || "";
 
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
 
-  const API_URL = "https://study-mate-v1-ten.vercel.app/api";
-
   const handleVerify = async () => {
     if (code.length !== 6) {
       Alert.alert(
         "Invalid Code",
-        "Please enter the 6-digit verification code.",
+        "Please enter the 6-digit verification code."
       );
       return;
     }
@@ -47,69 +50,33 @@ export function VerifyEmailScreen() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/verify-code`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email,
-          code,
-        }),
-      });
+      const data = await verifyEmail(code, email);
 
-      const data = await response.json();
-
-      if (response.ok) {
-        Alert.alert("Success", "Your email has been verified successfully.", [
-          {
-            text: "Login",
-            onPress: () =>
-              navigation.reset({
-                index: 0,
-                routes: [{ name: "Login" }],
-              }),
-          },
-        ]);
-      } else {
-        Alert.alert("Verification Failed", data.error);
-      }
-    } catch (error) {
-      Alert.alert("Error", "Unable to connect to the server.");
+      Alert.alert(
+        "Success 🎉", 
+        "Your email has been verified successfully!"
+      );
+    } catch (error: any) {
+      Alert.alert("Verification Failed", error.message || "Unable to verify code.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleResendVerification = async () => {
     setResendLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/resend-verification`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        Alert.alert(
-          "Verification Code Sent",
-          "A new verification code has been sent to your email.",
-        );
-      } else {
-        Alert.alert("Error", data.error);
-      }
-    } catch (error) {
-      Alert.alert("Error", "Unable to connect to the server.");
+      await resendVerification(email);
+      Alert.alert(
+        "Verification Code Sent",
+        "A new verification code has been sent to your email."
+      );
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Unable to send verification code.");
+    } finally {
+      setResendLoading(false);
     }
-
-    setResendLoading(false);
   };
 
   return (
@@ -136,9 +103,9 @@ export function VerifyEmailScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color="#4c669f" />
           ) : (
-            <Text style={styles.buttonText}>Verify</Text>
+            <Text style={styles.buttonText}>Verify & Continue</Text>
           )}
         </TouchableOpacity>
         <TouchableOpacity
@@ -147,17 +114,10 @@ export function VerifyEmailScreen() {
           disabled={resendLoading}
         >
           {resendLoading ? (
-            <ActivityIndicator color="#4c669f" />
+            <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.linkText}>Resend Code</Text>
           )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.navigate("Login")}
-        >
-          <Ionicons name="arrow-back" size={20} color="#4c669f" />
-          <Text style={styles.backText}>Back to Login</Text>
         </TouchableOpacity>
       </View>
     </LinearGradient>
@@ -190,6 +150,7 @@ const styles = StyleSheet.create({
   email: {
     fontSize: 16,
     color: "#fff",
+    fontWeight: "600",
     marginBottom: 24,
     textAlign: "center",
   },
@@ -197,12 +158,15 @@ const styles = StyleSheet.create({
     width: "100%",
     minHeight: 52,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,255,255,0.15)",
     color: "#fff",
     paddingHorizontal: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: "rgba(255,255,255,0.3)",
+    fontSize: 18,
+    textAlign: "center",
+    letterSpacing: 4,
   },
   button: {
     width: "100%",
@@ -216,6 +180,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#4c669f",
     fontWeight: "700",
+    fontSize: 16,
   },
   linkButton: {
     paddingVertical: 12,

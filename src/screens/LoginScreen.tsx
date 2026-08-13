@@ -33,24 +33,7 @@ export function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
 
-  // Check if user is already authenticated and redirect accordingly
-  useEffect(() => {
-    if (!authLoading && user) {
-      // Check if user has completed onboarding
-      const hasCompletedOnboarding = user.onboardingCompleted || false;
-      if (hasCompletedOnboarding) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Main' }],
-        });
-      } else {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Onboarding' }],
-        });
-      }
-    }
-  }, [authLoading, user, navigation]);
+
 
   const handleLogin = async () => {
     if (!email || !password) {

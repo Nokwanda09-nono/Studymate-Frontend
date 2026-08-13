@@ -17,8 +17,9 @@ import { CustomCard } from "../components/CustomCard";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 
+import { API_URL } from "../config/api";
+
 const TOTAL_STEPS = 10;
-const API_URL = "https://your-api-url.com";
 
 interface OnboardingProfile {
   qualification: string;
@@ -36,7 +37,7 @@ interface OnboardingProfile {
 export function OnboardingScreen() {
   const navigation = useNavigation();
   const { setProfile } = useStore();
-  const { saveOnboardingProfile, user } = useAuth();
+  const { saveOnboardingProfile, user, logout } = useAuth();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [profile, setProfileState] = useState<OnboardingProfile>({
@@ -88,19 +89,7 @@ export function OnboardingScreen() {
       
       Alert.alert(
         "Success! 🎉",
-        "Your profile has been saved. Welcome to Study Mate!",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              navigation.reset({
-                index: 0,
-                // Cast route to any to satisfy navigation.reset type expectations
-                routes: [{ name: "Main" } as any],
-              });
-            },
-          },
-        ]
+        "Your profile has been saved. Welcome to Study Mate!"
       );
     } catch (error: any) {
       console.error("❌ Onboarding error:", error);
@@ -113,13 +102,9 @@ export function OnboardingScreen() {
           {
             text: "OK",
               onPress: () => {
-                // If it's a session error, redirect to login
+                // If it's a session error, log out to trigger automatic navigation to Login
                 if (error.message.includes('session') || error.message.includes('token')) {
-                  navigation.reset({
-                    index: 0,
-                    // Cast route to any to satisfy navigation.reset type expectations
-                    routes: [{ name: "Login" } as any],
-                  });
+                  logout();
                 }
               },
           },

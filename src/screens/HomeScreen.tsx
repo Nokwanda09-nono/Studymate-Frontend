@@ -21,6 +21,9 @@ export function HomeScreen() {
   const { modules, schedule, assessments } = useStore();
 
   const getUsername = () => {
+    if (user?.firstName) {
+      return user.firstName;
+    }
     if (user?.email) {
       const parts = user.email.split("@");
       const name = parts[0];
