@@ -338,7 +338,7 @@ export function ProfileScreen() {
         <View style={styles.viewFieldContent}>
           {icon && (
             <View style={styles.viewFieldIcon}>
-              <Ionicons name={icon as any} size={18} color="#6366f1" />
+              <Ionicons name={icon as any} size={18} color="#113e17ff" />
             </View>
           )}
           <View style={styles.viewFieldText}>
@@ -358,7 +358,7 @@ export function ProfileScreen() {
       >
         {/* Profile Header with Gradient */}
         <LinearGradient
-          colors={["#6366f1", "#8b5cf6"]}
+          colors={["#079900ff", "#21632aff"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.profileHeader}
@@ -382,7 +382,7 @@ export function ProfileScreen() {
               onPress={() => setIsEditing(true)}
               activeOpacity={0.8}
             >
-              <Ionicons name="create-outline" size={18} color="#6366f1" />
+              <Ionicons name="create-outline" size={18} color="#11421cff" />
               <Text style={styles.editProfileText}>Edit Profile</Text>
             </TouchableOpacity>
           )}
@@ -391,7 +391,7 @@ export function ProfileScreen() {
         {/* Personal Information */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="person-outline" size={20} color="#6366f1" />
+            <Ionicons name="person-outline" size={20} color="#185a22ff" />
             <Text style={styles.sectionTitle}>Personal Information</Text>
           </View>
           <View style={styles.sectionContent}>
@@ -430,7 +430,7 @@ export function ProfileScreen() {
         {/* Academic Information */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="library-outline" size={20} color="#6366f1" />
+            <Ionicons name="library-outline" size={20} color="#155017ff" />
             <Text style={styles.sectionTitle}>Academic Information</Text>
           </View>
           <View style={styles.sectionContent}>
@@ -608,7 +608,7 @@ export function ProfileScreen() {
                   dropdownField === "studyChallenges"
                     ? (editedProfile.studyChallenges || []).includes(item.value)
                     : editedProfile[dropdownField as keyof EditableProfile] ===
-                      item.value;
+                    item.value;
 
                 return (
                   <TouchableOpacity
@@ -631,7 +631,7 @@ export function ProfileScreen() {
                       <Ionicons
                         name="checkmark-circle"
                         size={22}
-                        color="#6366f1"
+                        color="#1d3c19ff"
                       />
                     )}
                   </TouchableOpacity>
@@ -730,7 +730,7 @@ const styles = StyleSheet.create({
   },
   editProfileText: {
     fontSize: 14,
-    color: "#6366f1",
+    color: "#1b461aff",
     fontWeight: "600",
   },
   section: {
@@ -851,7 +851,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: "#6366f1",
+    backgroundColor: "#0e320dff",
   },
   saveButtonText: {
     fontSize: 16,

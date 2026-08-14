@@ -35,14 +35,14 @@ export function HomeScreen() {
   // Stats calculations
   const todayOfWeek = new Date().getDay();
   const todayClasses = schedule.filter((s) => s.dayOfWeek === todayOfWeek);
-  
+
   const completedAssessments = assessments.filter((a) => a.completed);
   const averageScore =
     completedAssessments.length > 0
       ? Math.round(
-          completedAssessments.reduce((sum, a) => sum + (a.score || 0), 0) /
-            completedAssessments.length
-        )
+        completedAssessments.reduce((sum, a) => sum + (a.score || 0), 0) /
+        completedAssessments.length
+      )
       : 0;
 
   // Format today's date
@@ -64,7 +64,7 @@ export function HomeScreen() {
       >
         {/* Welcome Section */}
         <LinearGradient
-          colors={["#6366f1", "#8b5cf6"]}
+          colors={["#0d311fff", "#085716ff"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.welcomeCard}
@@ -89,7 +89,7 @@ export function HomeScreen() {
         <View style={styles.statsGrid}>
           <CustomCard style={styles.statCard}>
             <View style={[styles.statIconWrapper, { backgroundColor: "#e0e7ff" }]}>
-              <Ionicons name="folder-open" size={22} color="#6366f1" />
+              <Ionicons name="folder-open" size={22} color="#062e07ff" />
             </View>
             <Text style={styles.statNumber}>{modules.length}</Text>
             <Text style={styles.statLabel}>Modules</Text>

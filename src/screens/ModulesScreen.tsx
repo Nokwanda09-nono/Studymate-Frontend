@@ -18,6 +18,8 @@ import { CustomCard } from "../components/CustomCard";
 import { CustomButton } from "../components/CustomButton";
 import { AnimatedModal } from "../components/AnimatedModal";
 import { useStore } from "../context/StoreContext";
+import * as DocumentPicker from "expo-document-picker";
+
 
 // Define your navigation param list
 type RootStackParamList = {
@@ -70,6 +72,35 @@ export function ModulesScreen() {
     setModalVisible(false);
   };
 
+  const handleUploadFiles = async (moduleId: string) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["application/pdf", "image/*", "text/*"],
+        multiple: true,
+      });
+      if (result.canceled) {
+        return;
+      }
+
+      const files = result.assets || [];
+      files.forEach((file) => {
+        const newFile = {
+          id: `${moduleId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          moduleId,
+          name: file.name,
+          type: file.mimeType || "unknown",
+          size: file.size || 0,
+          uploadedAt: new Date(),
+          uri: file.uri,
+        };
+        addFile(newFile);
+      });
+      Alert.alert("Success", "Files uploaded successfully");
+    } catch (e) {
+      console.error("File upload error", e);
+    }
+  };
+
   const renderModule = ({ item }: { item: Module }) => (
     <CustomCard
       key={item.id}
@@ -79,7 +110,7 @@ export function ModulesScreen() {
       <View
         style={[
           styles.moduleIcon,
-          { backgroundColor: item.color || "#6366f1" },
+          { backgroundColor: item.color || "#0b230bff" },
         ]}
       >
         <Ionicons name="book" size={28} color="white" />
@@ -91,6 +122,13 @@ export function ModulesScreen() {
         <Ionicons name="document-text-outline" size={14} color="#6b7280" />
         <Text style={styles.moduleFileCount}>{item.fileCount || 0} files</Text>
       </View>
+      {/* Upload button */}
+      <TouchableOpacity
+        style={styles.uploadButton}
+        onPress={() => handleUploadFiles(item.id)}
+      >
+        <Ionicons name="cloud-upload-outline" size={20} color="#63f17bff" />
+      </TouchableOpacity>
     </CustomCard>
   );
 
@@ -112,7 +150,7 @@ export function ModulesScreen() {
           style={styles.createButton}
           onPress={() => setModalVisible(true)}
         >
-          <Ionicons name="add-circle" size={24} color="#6366f1" />
+          <Ionicons name="add-circle" size={24} color="#35ce61ff" />
           <Text style={styles.createButtonText}>{"Create New Module"}</Text>
         </TouchableOpacity>
 
@@ -178,7 +216,42 @@ export function ModulesScreen() {
       <BottomNav />
     </SafeAreaView>
   );
-}
+};
+
+// ----- New helper function for file upload -----
+const handleUploadFiles = async (moduleId: string) => {
+  try {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["application/pdf", "image/*", "text/*"],
+      multiple: true,
+    });
+    if (result.type === "cancel") {
+      return;
+    }
+    // For multiple selections, result will be an array in newer SDKs; handle both cases
+    const files = Array.isArray(result) ? result : [result];
+    files.forEach((file) => {
+      const newFile = {
+        id: `${moduleId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        moduleId,
+        name: file.name,
+        type: file.mimeType || "unknown",
+        size: file.size,
+        uploadedAt: new Date(),
+        uri: file.uri,
+      };
+      // Use store context addFile
+      // This function is defined inside the component via the hook
+      // We'll call addFile from the store (need to get it via hook above)
+      // Since this helper is defined inside the component, we can access addFile via closure.
+      // However, addFile is defined in the component's scope via useStore().
+      // We'll move this helper inside the component after the hook declarations.
+    });
+  } catch (e) {
+    console.error("File upload error", e);
+  }
+};
+
 
 const styles = StyleSheet.create({
   container: {
@@ -222,7 +295,7 @@ const styles = StyleSheet.create({
   createButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#6366f1",
+    color: "#070f0bff",
     marginLeft: 8,
   },
   modulesList: {

@@ -235,7 +235,7 @@ export function ScheduleScreen() {
           setTimetableModalVisible(true);
         }}
       >
-        <Ionicons name="add-circle-outline" size={24} color="#6366f1" />
+        <Ionicons name="add-circle-outline" size={24} color="#083b23ff" />
         <Text style={styles.addTimetableText}>Add to Timetable</Text>
       </TouchableOpacity>
 
@@ -354,7 +354,7 @@ export function ScheduleScreen() {
         style={styles.generateButton}
         onPress={() => setAssessmentModalVisible(true)}
       >
-        <Ionicons name="sparkles" size={24} color="#6366f1" />
+        <Ionicons name="sparkles" size={24} color="#1d3a1aff" />
         <Text style={styles.generateButtonText}>Generate AI Assessment</Text>
       </TouchableOpacity>
 
@@ -375,7 +375,7 @@ export function ScheduleScreen() {
               <View style={styles.assessmentHeader}>
                 <View style={styles.assessmentInfo}>
                   <View style={styles.assessmentTitleRow}>
-                    <Ionicons name="sparkles" size={16} color="#6366f1" />
+                    <Ionicons name="sparkles" size={16} color="#134926ff" />
                     <Text style={styles.assessmentTitle}>
                       {assessment.title}
                     </Text>
@@ -439,7 +439,7 @@ export function ScheduleScreen() {
           <Ionicons
             name="calendar-outline"
             size={20}
-            color={activeTab === "timetable" ? "#6366f1" : "#6b7280"}
+            color={activeTab === "timetable" ? "#185516ff" : "#6b7280"}
           />
           <Text
             style={[
@@ -460,7 +460,7 @@ export function ScheduleScreen() {
           <Ionicons
             name="clipboard-outline"
             size={20}
-            color={activeTab === "assessments" ? "#6366f1" : "#6b7280"}
+            color={activeTab === "assessments" ? "#45cf53ff" : "#6b7280"}
           />
           <Text
             style={[
@@ -530,7 +530,7 @@ export function ScheduleScreen() {
                       style={[
                         styles.moduleOption,
                         newTimetableItem.moduleId === module.id &&
-                          styles.moduleOptionSelected,
+                        styles.moduleOptionSelected,
                       ]}
                       onPress={() =>
                         setNewTimetableItem({
@@ -559,7 +559,7 @@ export function ScheduleScreen() {
                     style={[
                       styles.dayOption,
                       newTimetableItem.dayOfWeek === index &&
-                        styles.dayOptionSelected,
+                      styles.dayOptionSelected,
                     ]}
                     onPress={() =>
                       setNewTimetableItem({
@@ -572,7 +572,7 @@ export function ScheduleScreen() {
                       style={[
                         styles.dayOptionText,
                         newTimetableItem.dayOfWeek === index &&
-                          styles.dayOptionTextSelected,
+                        styles.dayOptionTextSelected,
                       ]}
                     >
                       {day}
@@ -660,7 +660,7 @@ export function ScheduleScreen() {
                     style={[
                       styles.moduleOption,
                       selectedModule === module.id &&
-                        styles.moduleOptionSelected,
+                      styles.moduleOptionSelected,
                     ]}
                     onPress={() => setSelectedModule(module.id)}
                   >
@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
   tabButtonActive: {
     backgroundColor: "#eef2ff",
     borderWidth: 1,
-    borderColor: "#6366f1",
+    borderColor: "#2a6f22ff",
   },
   tabButtonText: {
     fontSize: 14,
@@ -773,7 +773,7 @@ const styles = StyleSheet.create({
     color: "#6b7280",
   },
   tabButtonTextActive: {
-    color: "#6366f1",
+    color: "#55d164ff",
   },
   scrollContent: {
     padding: 16,
@@ -806,7 +806,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#6366f1",
+    color: "#369c11ff",
     marginTop: 4,
   },
   statSubLabel: {
@@ -823,7 +823,7 @@ const styles = StyleSheet.create({
   },
   statProgressFill: {
     height: "100%",
-    backgroundColor: "#6366f1",
+    backgroundColor: "#3cd961ff",
     borderRadius: 2,
   },
   addTimetableButton: {
@@ -836,13 +836,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 16,
     borderWidth: 2,
-    borderColor: "#6366f1",
+    borderColor: "#15af36ff",
     borderStyle: "dashed",
   },
   addTimetableText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#6366f1",
+    color: "#33c963ff",
   },
   weekHeader: {
     flexDirection: "row",
@@ -863,7 +863,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   weekDaySelected: {
-    backgroundColor: "#6366f1",
+    backgroundColor: "#28d23cff",
   },
   weekDayText: {
     fontSize: 13,
@@ -962,13 +962,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 16,
     borderWidth: 2,
-    borderColor: "#6366f1",
+    borderColor: "#1a5e30ff",
     borderStyle: "dashed",
   },
   generateButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#6366f1",
+    color: "#1a5e30ff",
   },
   emptyState: {
     alignItems: "center",
@@ -1037,7 +1037,7 @@ const styles = StyleSheet.create({
     color: "#10b981",
   },
   startButton: {
-    backgroundColor: "#6366f1",
+    backgroundColor: "#164f36ff",
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 8,
@@ -1106,7 +1106,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9fafb",
   },
   moduleOptionSelected: {
-    borderColor: "#6366f1",
+    borderColor: "#61dc54ff",
     backgroundColor: "#eef2ff",
   },
   moduleColorDot: {
@@ -1148,7 +1148,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9fafb",
   },
   dayOptionSelected: {
-    borderColor: "#6366f1",
+    borderColor: "#42ba68ff",
     backgroundColor: "#eef2ff",
   },
   dayOptionText: {
@@ -1157,7 +1157,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   dayOptionTextSelected: {
-    color: "#6366f1",
+    color: "#3db01dff",
   },
   timeRow: {
     flexDirection: "row",
@@ -1176,7 +1176,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   typeOptionSelected: {
-    borderColor: "#6366f1",
+    borderColor: "#63f178ff",
     backgroundColor: "#eef2ff",
   },
   typeOptionText: {
@@ -1185,10 +1185,10 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   typeOptionTextSelected: {
-    color: "#6366f1",
+    color: "#2fbb2aff",
   },
   saveButton: {
-    backgroundColor: "#6366f1",
+    backgroundColor: "#63f18cff",
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
