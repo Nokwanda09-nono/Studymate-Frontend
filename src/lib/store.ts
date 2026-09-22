@@ -9,13 +9,17 @@ export interface User {
 }
 
 export interface UserProfile {
-  studyHoursPerDay?: number;
-  studyDaysPerWeek?: number;
+  studyHoursPerDay?: number | string;
+  studyDaysPerWeek?: number | string;
   academicGoal?: string;
   studyStyle?: string;
   fieldOfStudy?: string;
   academicLevel?: string;
   preferredStudyTime?: string;
+  learningStyle?: string;
+  productiveTime?: string;
+  qualification?: string;
+  studyChallenges?: string[];
 }
 
 export interface Module {

@@ -41,20 +41,37 @@ export function ProfileScreen() {
   const { logout, user: authUser, updateUser } = useAuth();
   const { profile, setProfile } = useStore();
 
+  const normalizeAcademicLevel = (value?: string) => {
+    if (!value) return "";
+
+    const mapping: Record<string, string> = {
+      bachelor: "undergraduate",
+      master: "undergraduate",
+      phd: "phd",
+      diploma: "graduate",
+      certificate: "graduate",
+      "high-school": "high-school",
+      other: "undergraduate",
+    };
+
+    return mapping[value] || value;
+  };
+
   const userProf: any = authUser?.profile || profile || {};
+  const mergedProfile: any = authUser?.profile || profile || userProf || {};
 
   const [isEditing, setIsEditing] = useState(false);
   const [editedProfile, setEditedProfile] = useState<EditableProfile>({
     firstName: authUser?.firstName || "",
     lastName: authUser?.lastName || "",
-    academicLevel: userProf.qualification || userProf.academicLevel || "",
-    fieldOfStudy: userProf.fieldOfStudy || "",
-    academicGoal: userProf.academicGoal || "",
-    studyStyle: userProf.learningStyle || userProf.studyStyle || "",
-    studyHoursPerDay: String(userProf.studyHours || userProf.studyHoursPerDay || ""),
-    studyDaysPerWeek: String(userProf.studyDaysPerWeek || ""),
-    preferredStudyTime: userProf.productiveTime || userProf.preferredStudyTime || "",
-    studyChallenges: userProf.studyChallenges || [],
+    academicLevel: normalizeAcademicLevel(mergedProfile.qualification || mergedProfile.academicLevel || ""),
+    fieldOfStudy: mergedProfile.fieldOfStudy || "",
+    academicGoal: mergedProfile.academicGoal || "",
+    studyStyle: mergedProfile.learningStyle || mergedProfile.studyStyle || "",
+    studyHoursPerDay: String(mergedProfile.studyHours || mergedProfile.studyHoursPerDay || ""),
+    studyDaysPerWeek: String(mergedProfile.studyDaysPerWeek || ""),
+    preferredStudyTime: mergedProfile.productiveTime || mergedProfile.preferredStudyTime || "",
+    studyChallenges: mergedProfile.studyChallenges || [],
   });
 
   const [showDropdown, setShowDropdown] = useState<string | null>(null);
@@ -165,7 +182,10 @@ export function ProfileScreen() {
       graduate: "Graduate Student",
       phd: "PhD Candidate",
     };
-    return academicLevelMap[profile?.academicLevel || ""] || "Student";
+    const level = normalizeAcademicLevel(
+      mergedProfile?.academicLevel || mergedProfile?.qualification || profile?.academicLevel || ""
+    );
+    return academicLevelMap[level] || "Student";
   };
 
   const openDropdown = (field: string) => {
@@ -205,8 +225,8 @@ export function ProfileScreen() {
       });
 
       const profileData: any = {
-        ...profile,
-        academicLevel: editedProfile.academicLevel,
+        ...(profile || userProf),
+        academicLevel: normalizeAcademicLevel(editedProfile.academicLevel),
         fieldOfStudy: editedProfile.fieldOfStudy,
         academicGoal: editedProfile.academicGoal,
         studyStyle: editedProfile.studyStyle,
@@ -233,14 +253,16 @@ export function ProfileScreen() {
     setEditedProfile({
       firstName: authUser?.firstName || "",
       lastName: authUser?.lastName || "",
-      academicLevel: profile?.academicLevel || "",
-      fieldOfStudy: profile?.fieldOfStudy || "",
-      academicGoal: profile?.academicGoal || "",
-      studyStyle: profile?.studyStyle || "",
-      studyHoursPerDay: String(profile?.studyHoursPerDay || ""),
-      studyDaysPerWeek: String(profile?.studyDaysPerWeek || ""),
-      preferredStudyTime: profile?.preferredStudyTime || "",
-      studyChallenges: [],
+      academicLevel: normalizeAcademicLevel(
+        mergedProfile?.qualification || mergedProfile?.academicLevel || profile?.academicLevel || ""
+      ),
+      fieldOfStudy: mergedProfile?.fieldOfStudy || profile?.fieldOfStudy || "",
+      academicGoal: mergedProfile?.academicGoal || profile?.academicGoal || "",
+      studyStyle: mergedProfile?.studyStyle || mergedProfile?.learningStyle || profile?.studyStyle || "",
+      studyHoursPerDay: String(mergedProfile?.studyHoursPerDay || mergedProfile?.studyHours || profile?.studyHoursPerDay || ""),
+      studyDaysPerWeek: String(mergedProfile?.studyDaysPerWeek || profile?.studyDaysPerWeek || ""),
+      preferredStudyTime: mergedProfile?.preferredStudyTime || mergedProfile?.productiveTime || profile?.preferredStudyTime || "",
+      studyChallenges: mergedProfile?.studyChallenges || profile?.studyChallenges || [],
     });
     setIsEditing(false);
   };
@@ -317,9 +339,11 @@ export function ProfileScreen() {
     field?: string,
     icon?: string,
   ) => {
-    let displayValue = value || "Not set";
+    const hasValue = value !== undefined && value !== null && value !== "";
+    let displayValue = hasValue ? value : "Not set";
     if (field && displayMaps[field]) {
-      displayValue = displayMaps[field][value] || value || "Not set";
+      const normalizedValue = field === "academicLevel" ? normalizeAcademicLevel(value) : value;
+      displayValue = hasValue ? displayMaps[field][normalizedValue] || normalizedValue : "Not set";
     }
     if (field === "studyChallenges" && Array.isArray(value)) {
       displayValue =
@@ -494,43 +518,43 @@ export function ProfileScreen() {
               <>
                 {renderViewField(
                   "Academic Level",
-                  profile?.academicLevel,
+                  mergedProfile?.academicLevel || mergedProfile?.qualification || profile?.academicLevel,
                   "academicLevel",
                   "school-outline",
                 )}
                 {renderViewField(
                   "Field of Study",
-                  profile?.fieldOfStudy,
+                  mergedProfile?.fieldOfStudy || profile?.fieldOfStudy,
                   "fieldOfStudy",
                   "book-outline",
                 )}
                 {renderViewField(
                   "Academic Goal",
-                  profile?.academicGoal,
+                  mergedProfile?.academicGoal || profile?.academicGoal,
                   "academicGoal",
                   "flag-outline",
                 )}
                 {renderViewField(
                   "Study Style",
-                  profile?.studyStyle,
+                  mergedProfile?.studyStyle || mergedProfile?.learningStyle || profile?.studyStyle,
                   "studyStyle",
                   "bulb-outline",
                 )}
                 {renderViewField(
                   "Study Hours/Day",
-                  profile?.studyHoursPerDay,
+                  mergedProfile?.studyHoursPerDay || mergedProfile?.studyHours || profile?.studyHoursPerDay,
                   undefined,
                   "time-outline",
                 )}
                 {renderViewField(
                   "Study Days/Week",
-                  profile?.studyDaysPerWeek,
+                  mergedProfile?.studyDaysPerWeek || profile?.studyDaysPerWeek,
                   undefined,
                   "calendar-outline",
                 )}
                 {renderViewField(
                   "Preferred Study Time",
-                  profile?.preferredStudyTime,
+                  mergedProfile?.preferredStudyTime || mergedProfile?.productiveTime || profile?.preferredStudyTime,
                   "preferredStudyTime",
                   "moon-outline",
                 )}

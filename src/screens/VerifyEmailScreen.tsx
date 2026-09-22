@@ -22,6 +22,7 @@ type RootStackParamList = {
   Login: undefined;
   VerifyEmail: {
     email: string;
+    verificationCode?: string;
   };
   Home: undefined;
   Onboarding: undefined;
@@ -33,8 +34,9 @@ export function VerifyEmailScreen() {
   const { verifyEmail, resendVerification } = useAuth();
 
   const email = route.params?.email || "";
+  const defaultCode = route.params?.verificationCode || "";
 
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(defaultCode);
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
 
@@ -88,6 +90,9 @@ export function VerifyEmailScreen() {
         <Text style={styles.title}>Verify Your Email</Text>
         <Text style={styles.subtitle}>Enter the 6-digit code sent to</Text>
         <Text style={styles.email}>{email}</Text>
+        {defaultCode ? (
+          <Text style={styles.devCodeText}>Development code: {defaultCode}</Text>
+        ) : null}
         <TextInput
           style={styles.input}
           value={code}
@@ -151,7 +156,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#fff",
     fontWeight: "600",
-    marginBottom: 24,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  devCodeText: {
+    fontSize: 14,
+    color: "#dbeafe",
+    fontWeight: "700",
+    marginBottom: 20,
     textAlign: "center",
   },
   input: {

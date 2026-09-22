@@ -3,15 +3,15 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { CustomButton } from '../components/CustomButton';
 import { useAuth } from '../context/AuthContext';
@@ -54,18 +54,32 @@ export function RegisterScreen() {
     setLoading(true);
 
     try {
-      await register(firstName, lastName, email, password);
-      
-      Alert.alert(
-        'Registration Successful',
-        'Please check your email to verify your account. You will be redirected to the verification screen.',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.navigate('VerifyEmail', { email }),
-          },
-        ]
-      );
+      const data = await register(firstName, lastName, email, password);
+      const verificationCode = data?.verificationCode;
+
+      if (verificationCode) {
+        Alert.alert(
+          'Registration Successful',
+          `Use this verification code to continue: ${verificationCode}`,
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.navigate('VerifyEmail', { email, verificationCode }),
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Registration Successful',
+          'Please check your email to verify your account. You will be redirected to the verification screen.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.navigate('VerifyEmail', { email }),
+            },
+          ]
+        );
+      }
     } catch (error: any) {
       Alert.alert('Registration Failed', error.message || 'Something went wrong');
     } finally {

@@ -19,15 +19,17 @@ import { useStore } from "../context/StoreContext";
 
 import { API_URL } from "../config/api";
 
-const TOTAL_STEPS = 10;
+const TOTAL_STEPS = 12;
 
 interface OnboardingProfile {
   qualification: string;
   year: string;
+  fieldOfStudy: string;
   academicGoal: string;
   learningStyle: string;
   studyChallenges: string[];
   studyHours: string;
+  studyDaysPerWeek: string;
   productiveTime: string;
   reminderFrequency: string;
   aiSupport: string;
@@ -43,10 +45,12 @@ export function OnboardingScreen() {
   const [profile, setProfileState] = useState<OnboardingProfile>({
     qualification: "",
     year: "",
+    fieldOfStudy: "",
     academicGoal: "",
     learningStyle: "",
     studyChallenges: [],
     studyHours: "",
+    studyDaysPerWeek: "",
     productiveTime: "",
     reminderFrequency: "",
     aiSupport: "",
@@ -160,20 +164,24 @@ export function OnboardingScreen() {
       case 2:
         return profile.year !== "";
       case 3:
-        return profile.academicGoal !== "";
+        return profile.fieldOfStudy !== "";
       case 4:
-        return profile.learningStyle !== "";
+        return profile.academicGoal !== "";
       case 5:
-        return (profile.studyChallenges || []).length >= 2;
+        return profile.learningStyle !== "";
       case 6:
-        return profile.studyHours !== "";
+        return (profile.studyChallenges || []).length >= 2;
       case 7:
-        return profile.productiveTime !== "";
+        return profile.studyHours !== "";
       case 8:
-        return profile.reminderFrequency !== "";
+        return profile.studyDaysPerWeek !== "";
       case 9:
-        return profile.aiSupport !== "";
+        return profile.productiveTime !== "";
       case 10:
+        return profile.reminderFrequency !== "";
+      case 11:
+        return profile.aiSupport !== "";
+      case 12:
         return profile.resourceRecommendations !== "";
       default:
         return false;
@@ -185,9 +193,7 @@ export function OnboardingScreen() {
       case 1:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>
-              What qualification are you studying?
-            </Text>
+            <Text style={styles.questionText}>What qualification are you studying?</Text>
             <View style={styles.optionsList}>
               {[
                 { value: "bachelor", label: "Bachelor's Degree" },
@@ -202,18 +208,14 @@ export function OnboardingScreen() {
                   key={qual.value}
                   style={[
                     styles.listOption,
-                    profile.qualification === qual.value &&
-                      styles.optionSelected,
+                    profile.qualification === qual.value && styles.optionSelected,
                   ]}
-                  onPress={() =>
-                    setProfileState({ ...profile, qualification: qual.value })
-                  }
+                  onPress={() => setProfileState({ ...profile, qualification: qual.value })}
                 >
                   <Text
                     style={[
                       styles.optionText,
-                      profile.qualification === qual.value &&
-                        styles.optionTextSelected,
+                      profile.qualification === qual.value && styles.optionTextSelected,
                     ]}
                   >
                     {qual.label}
@@ -227,9 +229,7 @@ export function OnboardingScreen() {
       case 2:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>
-              What year are you currently in?
-            </Text>
+            <Text style={styles.questionText}>What year are you currently in?</Text>
             <View style={styles.optionsList}>
               {[
                 { value: "first", label: "First Year" },
@@ -244,9 +244,7 @@ export function OnboardingScreen() {
                     styles.listOption,
                     profile.year === year.value && styles.optionSelected,
                   ]}
-                  onPress={() =>
-                    setProfileState({ ...profile, year: year.value })
-                  }
+                  onPress={() => setProfileState({ ...profile, year: year.value })}
                 >
                   <Text
                     style={[
@@ -265,9 +263,45 @@ export function OnboardingScreen() {
       case 3:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>
-              What is your academic goal this semester?
-            </Text>
+            <Text style={styles.questionText}>What field of study are you in?</Text>
+            <View style={styles.optionsList}>
+              {[
+                { value: "computer-science", label: "Computer Science" },
+                { value: "engineering", label: "Engineering" },
+                { value: "business", label: "Business" },
+                { value: "medicine", label: "Medicine" },
+                { value: "law", label: "Law" },
+                { value: "arts", label: "Arts & Humanities" },
+                { value: "sciences", label: "Natural Sciences" },
+                { value: "social-sciences", label: "Social Sciences" },
+                { value: "other", label: "Other" },
+              ].map((field) => (
+                <TouchableOpacity
+                  key={field.value}
+                  style={[
+                    styles.listOption,
+                    profile.fieldOfStudy === field.value && styles.optionSelected,
+                  ]}
+                  onPress={() => setProfileState({ ...profile, fieldOfStudy: field.value })}
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.fieldOfStudy === field.value && styles.optionTextSelected,
+                    ]}
+                  >
+                    {field.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        );
+
+      case 4:
+        return (
+          <View style={styles.stepContainer}>
+            <Text style={styles.questionText}>What is your academic goal this semester?</Text>
             <View style={styles.optionsList}>
               {[
                 { value: "pass", label: "Pass all my modules" },
@@ -279,18 +313,14 @@ export function OnboardingScreen() {
                   key={goal.value}
                   style={[
                     styles.listOption,
-                    profile.academicGoal === goal.value &&
-                      styles.optionSelected,
+                    profile.academicGoal === goal.value && styles.optionSelected,
                   ]}
-                  onPress={() =>
-                    setProfileState({ ...profile, academicGoal: goal.value })
-                  }
+                  onPress={() => setProfileState({ ...profile, academicGoal: goal.value })}
                 >
                   <Text
                     style={[
                       styles.optionText,
-                      profile.academicGoal === goal.value &&
-                        styles.optionTextSelected,
+                      profile.academicGoal === goal.value && styles.optionTextSelected,
                     ]}
                   >
                     {goal.label}
@@ -301,7 +331,7 @@ export function OnboardingScreen() {
           </View>
         );
 
-      case 4:
+      case 5:
         return (
           <View style={styles.stepContainer}>
             <Text style={styles.questionText}>How do you learn best?</Text>
@@ -309,42 +339,26 @@ export function OnboardingScreen() {
               {[
                 { value: "reading", label: "Reading notes", icon: "book" },
                 { value: "videos", label: "Watching videos", icon: "videocam" },
-                {
-                  value: "practice",
-                  label: "Practice questions",
-                  icon: "fitness",
-                },
-                {
-                  value: "combination",
-                  label: "A combination of all",
-                  icon: "sync",
-                },
+                { value: "practice", label: "Practice questions", icon: "fitness" },
+                { value: "combination", label: "A combination of all", icon: "sync" },
               ].map((style) => (
                 <TouchableOpacity
                   key={style.value}
                   style={[
                     styles.listOption,
-                    profile.learningStyle === style.value &&
-                      styles.optionSelected,
+                    profile.learningStyle === style.value && styles.optionSelected,
                   ]}
-                  onPress={() =>
-                    setProfileState({ ...profile, learningStyle: style.value })
-                  }
+                  onPress={() => setProfileState({ ...profile, learningStyle: style.value })}
                 >
                   <Ionicons
                     name={style.icon as any}
                     size={24}
-                    color={
-                      profile.learningStyle === style.value
-                        ? "#6366f1"
-                        : "#9ca3af"
-                    }
+                    color={profile.learningStyle === style.value ? "#6366f1" : "#9ca3af"}
                   />
                   <Text
                     style={[
                       styles.optionText,
-                      profile.learningStyle === style.value &&
-                        styles.optionTextSelected,
+                      profile.learningStyle === style.value && styles.optionTextSelected,
                       { marginLeft: 12, flex: 1 },
                     ]}
                   >
@@ -356,44 +370,20 @@ export function OnboardingScreen() {
           </View>
         );
 
-      case 5:
+      case 6:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>
-              What is your biggest study challenge? (Select 2 or more)
-            </Text>
+            <Text style={styles.questionText}>What is your biggest study challenge? (Select 2 or more)</Text>
             <Text style={styles.subtext}>Select at least 2 options</Text>
             <View style={styles.optionsList}>
               {[
-                {
-                  value: "time-management",
-                  label: "Time management",
-                  icon: "time",
-                },
-                {
-                  value: "understanding",
-                  label: "Understanding difficult concepts",
-                  icon: "bulb",
-                },
-                {
-                  value: "remembering",
-                  label: "Remembering information",
-                  icon: "extension-puzzle",
-                },
-                {
-                  value: "motivation",
-                  label: "Staying motivated",
-                  icon: "flame",
-                },
-                {
-                  value: "exam-anxiety",
-                  label: "Exam anxiety",
-                  icon: "alert-circle",
-                },
+                { value: "time-management", label: "Time management", icon: "time" },
+                { value: "understanding", label: "Understanding difficult concepts", icon: "bulb" },
+                { value: "remembering", label: "Remembering information", icon: "extension-puzzle" },
+                { value: "motivation", label: "Staying motivated", icon: "flame" },
+                { value: "exam-anxiety", label: "Exam anxiety", icon: "alert-circle" },
               ].map((challenge) => {
-                const isSelected = (profile.studyChallenges || []).includes(
-                  challenge.value,
-                );
+                const isSelected = (profile.studyChallenges || []).includes(challenge.value);
                 return (
                   <TouchableOpacity
                     key={challenge.value}
@@ -417,13 +407,7 @@ export function OnboardingScreen() {
                     >
                       {challenge.label}
                     </Text>
-                    {isSelected && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={24}
-                        color="#6366f1"
-                      />
-                    )}
+                    {isSelected && <Ionicons name="checkmark-circle" size={24} color="#6366f1" />}
                   </TouchableOpacity>
                 );
               })}
@@ -431,12 +415,10 @@ export function OnboardingScreen() {
           </View>
         );
 
-      case 6:
+      case 7:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>
-              How many hours can you realistically study each day?
-            </Text>
+            <Text style={styles.questionText}>How many hours can you realistically study each day?</Text>
             <View style={styles.optionsList}>
               {[
                 { value: "less-than-1", label: "Less than 1 hour" },
@@ -450,15 +432,12 @@ export function OnboardingScreen() {
                     styles.listOption,
                     profile.studyHours === hours.value && styles.optionSelected,
                   ]}
-                  onPress={() =>
-                    setProfileState({ ...profile, studyHours: hours.value })
-                  }
+                  onPress={() => setProfileState({ ...profile, studyHours: hours.value })}
                 >
                   <Text
                     style={[
                       styles.optionText,
-                      profile.studyHours === hours.value &&
-                        styles.optionTextSelected,
+                      profile.studyHours === hours.value && styles.optionTextSelected,
                     ]}
                   >
                     {hours.label}
@@ -469,60 +448,70 @@ export function OnboardingScreen() {
           </View>
         );
 
-      case 7:
+      case 8:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>
-              When are you usually most productive?
-            </Text>
+            <Text style={styles.questionText}>How many days per week do you usually study?</Text>
             <View style={styles.optionsList}>
               {[
-                {
-                  value: "morning",
-                  label: "Morning (6 AM - 12 PM)",
-                  icon: "sunny",
-                },
-                {
-                  value: "afternoon",
-                  label: "Afternoon (12 PM - 4 PM)",
-                  icon: "sunny-outline",
-                },
-                {
-                  value: "evening",
-                  label: "Evening (4 PM - 9 PM)",
-                  icon: "moon",
-                },
-                {
-                  value: "late-night",
-                  label: "Late night (9 PM - 2 AM)",
-                  icon: "moon-outline",
-                },
+                { value: "1", label: "1 day" },
+                { value: "2", label: "2 days" },
+                { value: "3", label: "3 days" },
+                { value: "4", label: "4 days" },
+                { value: "5", label: "5 days" },
+                { value: "6", label: "6 days" },
+                { value: "7", label: "7 days" },
+              ].map((dayCount) => (
+                <TouchableOpacity
+                  key={dayCount.value}
+                  style={[
+                    styles.listOption,
+                    profile.studyDaysPerWeek === dayCount.value && styles.optionSelected,
+                  ]}
+                  onPress={() => setProfileState({ ...profile, studyDaysPerWeek: dayCount.value })}
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      profile.studyDaysPerWeek === dayCount.value && styles.optionTextSelected,
+                    ]}
+                  >
+                    {dayCount.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        );
+
+      case 9:
+        return (
+          <View style={styles.stepContainer}>
+            <Text style={styles.questionText}>When are you usually most productive?</Text>
+            <View style={styles.optionsList}>
+              {[
+                { value: "morning", label: "Morning (6 AM - 12 PM)", icon: "sunny" },
+                { value: "afternoon", label: "Afternoon (12 PM - 4 PM)", icon: "sunny-outline" },
+                { value: "evening", label: "Evening (4 PM - 9 PM)", icon: "moon" },
+                { value: "late-night", label: "Late night (9 PM - 2 AM)", icon: "moon-outline" },
               ].map((time) => (
                 <TouchableOpacity
                   key={time.value}
                   style={[
                     styles.listOption,
-                    profile.productiveTime === time.value &&
-                      styles.optionSelected,
+                    profile.productiveTime === time.value && styles.optionSelected,
                   ]}
-                  onPress={() =>
-                    setProfileState({ ...profile, productiveTime: time.value })
-                  }
+                  onPress={() => setProfileState({ ...profile, productiveTime: time.value })}
                 >
                   <Ionicons
                     name={time.icon as any}
                     size={24}
-                    color={
-                      profile.productiveTime === time.value
-                        ? "#6366f1"
-                        : "#9ca3af"
-                    }
+                    color={profile.productiveTime === time.value ? "#6366f1" : "#9ca3af"}
                   />
                   <Text
                     style={[
                       styles.optionText,
-                      profile.productiveTime === time.value &&
-                        styles.optionTextSelected,
+                      profile.productiveTime === time.value && styles.optionTextSelected,
                       { marginLeft: 12 },
                     ]}
                   >
@@ -534,42 +523,30 @@ export function OnboardingScreen() {
           </View>
         );
 
-      case 8:
+      case 10:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>
-              How often would you like Study Mate to remind you to study?
-            </Text>
+            <Text style={styles.questionText}>How often would you like Study Mate to remind you to study?</Text>
             <View style={styles.optionsList}>
               {[
                 { value: "every-day", label: "Every day" },
                 { value: "every-two-days", label: "Every two days" },
                 { value: "twice-week", label: "Twice a week" },
                 { value: "once-week", label: "Once a week" },
-                {
-                  value: "before-assessments",
-                  label: "Only before assessments",
-                },
+                { value: "before-assessments", label: "Only before assessments" },
               ].map((freq) => (
                 <TouchableOpacity
                   key={freq.value}
                   style={[
                     styles.listOption,
-                    profile.reminderFrequency === freq.value &&
-                      styles.optionSelected,
+                    profile.reminderFrequency === freq.value && styles.optionSelected,
                   ]}
-                  onPress={() =>
-                    setProfileState({
-                      ...profile,
-                      reminderFrequency: freq.value,
-                    })
-                  }
+                  onPress={() => setProfileState({ ...profile, reminderFrequency: freq.value })}
                 >
                   <Text
                     style={[
                       styles.optionText,
-                      profile.reminderFrequency === freq.value &&
-                        styles.optionTextSelected,
+                      profile.reminderFrequency === freq.value && styles.optionTextSelected,
                     ]}
                   >
                     {freq.label}
@@ -580,61 +557,35 @@ export function OnboardingScreen() {
           </View>
         );
 
-      case 9:
+      case 11:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>
-              What type of support would you like from the AI?
-            </Text>
+            <Text style={styles.questionText}>What type of support would you like from the AI?</Text>
             <View style={styles.optionsList}>
               {[
-                {
-                  value: "explain",
-                  label: "Explain difficult concepts",
-                  icon: "school",
-                },
-                {
-                  value: "summarize",
-                  label: "Summarize notes",
-                  icon: "document-text",
-                },
-                {
-                  value: "quizzes",
-                  label: "Generate quizzes",
-                  icon: "help-circle",
-                },
-                {
-                  value: "study-plans",
-                  label: "Recommend study plans",
-                  icon: "calendar",
-                },
+                { value: "explain", label: "Explain difficult concepts", icon: "school" },
+                { value: "summarize", label: "Summarize notes", icon: "document-text" },
+                { value: "quizzes", label: "Generate quizzes", icon: "help-circle" },
+                { value: "study-plans", label: "Recommend study plans", icon: "calendar" },
                 { value: "all", label: "All of the above", icon: "apps" },
               ].map((support) => (
                 <TouchableOpacity
                   key={support.value}
                   style={[
                     styles.listOption,
-                    profile.aiSupport === support.value &&
-                      styles.optionSelected,
+                    profile.aiSupport === support.value && styles.optionSelected,
                   ]}
-                  onPress={() =>
-                    setProfileState({ ...profile, aiSupport: support.value })
-                  }
+                  onPress={() => setProfileState({ ...profile, aiSupport: support.value })}
                 >
                   <Ionicons
                     name={support.icon as any}
                     size={24}
-                    color={
-                      profile.aiSupport === support.value
-                        ? "#6366f1"
-                        : "#9ca3af"
-                    }
+                    color={profile.aiSupport === support.value ? "#6366f1" : "#9ca3af"}
                   />
                   <Text
                     style={[
                       styles.optionText,
-                      profile.aiSupport === support.value &&
-                        styles.optionTextSelected,
+                      profile.aiSupport === support.value && styles.optionTextSelected,
                       { marginLeft: 12, flex: 1 },
                     ]}
                   >
@@ -646,13 +597,10 @@ export function OnboardingScreen() {
           </View>
         );
 
-      case 10:
+      case 12:
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.questionText}>
-              Would you like Study Mate to recommend learning resources such as
-              YouTube videos when you need extra help?
-            </Text>
+            <Text style={styles.questionText}>Would you like Study Mate to recommend learning resources such as YouTube videos when you need extra help?</Text>
             <View style={styles.optionsList}>
               {[
                 { value: "yes", label: "Yes", icon: "checkmark-circle" },
@@ -662,30 +610,19 @@ export function OnboardingScreen() {
                   key={option.value}
                   style={[
                     styles.listOption,
-                    profile.resourceRecommendations === option.value &&
-                      styles.optionSelected,
+                    profile.resourceRecommendations === option.value && styles.optionSelected,
                   ]}
-                  onPress={() =>
-                    setProfileState({
-                      ...profile,
-                      resourceRecommendations: option.value,
-                    })
-                  }
+                  onPress={() => setProfileState({ ...profile, resourceRecommendations: option.value })}
                 >
                   <Ionicons
                     name={option.icon as any}
                     size={24}
-                    color={
-                      profile.resourceRecommendations === option.value
-                        ? "#6366f1"
-                        : "#9ca3af"
-                    }
+                    color={profile.resourceRecommendations === option.value ? "#6366f1" : "#9ca3af"}
                   />
                   <Text
                     style={[
                       styles.optionText,
-                      profile.resourceRecommendations === option.value &&
-                        styles.optionTextSelected,
+                      profile.resourceRecommendations === option.value && styles.optionTextSelected,
                       { marginLeft: 12 },
                     ]}
                   >
