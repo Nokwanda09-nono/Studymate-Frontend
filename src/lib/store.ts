@@ -1,4 +1,5 @@
-// lib/store.ts
+// src/lib/store.ts
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export interface User {
@@ -20,6 +21,11 @@ export interface UserProfile {
   productiveTime?: string;
   qualification?: string;
   studyChallenges?: string[];
+  studyPoints?: number;
+  studyTier?: string;
+  selectedAvatar?: string;
+  lowPointsAlertSent?: boolean;
+  accountDeletionWarning?: boolean;
 }
 
 export interface Module {
@@ -36,7 +42,19 @@ export interface FileItem {
   name: string;
   type: string;
   size: number;
-  uploadedAt: Date;
+
+  /**
+   * Local URI of the uploaded document.
+   * This will be needed later when we process documents
+   * for the AI tutor / RAG system.
+   */
+  uri: string;
+
+  /**
+   * ISO string is used instead of Date because AsyncStorage
+   * stores JSON and does not preserve JavaScript Date objects.
+   */
+  uploadedAt: string;
 }
 
 export interface Assessment {
@@ -76,33 +94,121 @@ class Store {
   private user: User | null = null;
   private profile: UserProfile | null = null;
 
+  /**
+   * Indicates whether AsyncStorage has finished loading.
+   * This is useful for preventing the application from treating
+   * the initial empty arrays as the real stored data.
+   */
+  private initialized = false;
+
+  /**
+   * Promise that resolves once all stored data has been loaded.
+   */
+  private initializationPromise: Promise<void>;
+
   constructor() {
-    this.loadFromStorage();
+    this.initializationPromise = this.loadFromStorage();
   }
 
-  private async loadFromStorage() {
-    try {
-      const modules = await AsyncStorage.getItem("modules");
-      const files = await AsyncStorage.getItem("files");
-      const assessments = await AsyncStorage.getItem("assessments");
-      const schedule = await AsyncStorage.getItem("schedule");
-      const attendance = await AsyncStorage.getItem("attendance");
-      const user = await AsyncStorage.getItem("user");
-      const profile = await AsyncStorage.getItem("profile");
+  /**
+   * Allows the React context to wait until AsyncStorage
+   * has finished loading.
+   */
+  async waitForInitialization(): Promise<void> {
+    await this.initializationPromise;
+  }
 
-      if (modules) this.modules = JSON.parse(modules);
-      if (files) this.files = JSON.parse(files);
-      if (assessments) this.assessments = JSON.parse(assessments);
-      if (schedule) this.schedule = JSON.parse(schedule);
-      if (attendance) this.attendance = JSON.parse(attendance);
-      if (user) this.user = JSON.parse(user);
-      if (profile) this.profile = JSON.parse(profile);
+  private async loadFromStorage(): Promise<void> {
+    try {
+      const [
+        modules,
+        files,
+        assessments,
+        schedule,
+        attendance,
+        user,
+        profile,
+      ] = await Promise.all([
+        AsyncStorage.getItem("modules"),
+        AsyncStorage.getItem("files"),
+        AsyncStorage.getItem("assessments"),
+        AsyncStorage.getItem("schedule"),
+        AsyncStorage.getItem("attendance"),
+        AsyncStorage.getItem("user"),
+        AsyncStorage.getItem("profile"),
+      ]);
+
+      if (modules) {
+        this.modules = JSON.parse(modules);
+      }
+
+      if (files) {
+        const parsedFiles = JSON.parse(files);
+
+        /**
+         * Older versions of the app may contain files where
+         * uploadedAt was stored as a Date/string and may not
+         * contain uri.
+         *
+         * We keep those files instead of crashing the store.
+         */
+        this.files = parsedFiles.map((file: any) => ({
+          ...file,
+          uri: typeof file.uri === "string" ? file.uri : "",
+          uploadedAt:
+            typeof file.uploadedAt === "string"
+              ? file.uploadedAt
+              : new Date(file.uploadedAt || Date.now()).toISOString(),
+        }));
+      }
+
+      if (assessments) {
+        this.assessments = JSON.parse(assessments);
+      }
+
+      if (schedule) {
+        this.schedule = JSON.parse(schedule);
+      }
+
+      if (attendance) {
+        this.attendance = JSON.parse(attendance);
+      }
+
+      if (user) {
+        this.user = JSON.parse(user);
+      }
+
+      if (profile) {
+        this.profile = JSON.parse(profile);
+      }
+
+      /**
+       * Recalculate module file counts after loading.
+       * This protects against old/stale fileCount values.
+       */
+      this.modules = this.modules.map((module) => ({
+        ...module,
+        fileCount: this.files.filter(
+          (file) => file.moduleId === module.id,
+        ).length,
+      }));
+
+      this.initialized = true;
     } catch (error) {
-      console.error("Error loading from storage:", error);
+      console.error("Error loading data from AsyncStorage:", error);
+
+      /**
+       * Even if storage loading fails, allow the application
+       * to continue instead of remaining stuck forever.
+       */
+      this.initialized = true;
     }
   }
 
-  private async saveToStorage(key: string, data: any) {
+  private async saveToStorage(
+    key: string,
+    data: unknown,
+  ): Promise<void> {
     try {
       await AsyncStorage.setItem(key, JSON.stringify(data));
     } catch (error) {
@@ -110,121 +216,243 @@ class Store {
     }
   }
 
-  // Module methods
+  // ============================================================
+  // MODULE METHODS
+  // ============================================================
+
   getModules(): Module[] {
-    return this.modules;
+    return [...this.modules];
   }
 
-  addModule(module: Module) {
-    this.modules.push(module);
-    this.saveToStorage("modules", this.modules);
+  addModule(module: Module): void {
+    this.modules = [...this.modules, module];
+
+    void this.saveToStorage("modules", this.modules);
   }
 
-  deleteModule(id: string) {
-    this.modules = this.modules.filter((m) => m.id !== id);
-    this.files = this.files.filter((f) => f.moduleId !== id);
-    this.assessments = this.assessments.filter((a) => a.moduleId !== id);
-    this.saveToStorage("modules", this.modules);
-    this.saveToStorage("files", this.files);
-    this.saveToStorage("assessments", this.assessments);
+  deleteModule(id: string): void {
+    this.modules = this.modules.filter(
+      (module) => module.id !== id,
+    );
+
+    this.files = this.files.filter(
+      (file) => file.moduleId !== id,
+    );
+
+    this.assessments = this.assessments.filter(
+      (assessment) => assessment.moduleId !== id,
+    );
+
+    void this.saveToStorage("modules", this.modules);
+    void this.saveToStorage("files", this.files);
+    void this.saveToStorage("assessments", this.assessments);
   }
 
-  // File methods
+  // ============================================================
+  // FILE METHODS
+  // ============================================================
+
   getFiles(): FileItem[] {
-    return this.files;
+    return [...this.files];
   }
 
-  addFile(file: FileItem) {
-    this.files.push(file);
-    const module = this.modules.find((m) => m.id === file.moduleId);
-    if (module) {
-      module.fileCount = this.files.filter(
-        (f) => f.moduleId === module.id,
-      ).length;
+  addFile(file: FileItem): void {
+    /**
+     * Normalize the upload date before storing.
+     */
+    const normalizedFile: FileItem = {
+      ...file,
+      uri: file.uri || "",
+      uploadedAt:
+        typeof file.uploadedAt === "string"
+          ? file.uploadedAt
+          : new Date(file.uploadedAt).toISOString(),
+    };
+
+    this.files = [...this.files, normalizedFile];
+
+    /**
+     * Update the file count of the associated module.
+     */
+    const moduleIndex = this.modules.findIndex(
+      (module) => module.id === normalizedFile.moduleId,
+    );
+
+    if (moduleIndex !== -1) {
+      this.modules[moduleIndex] = {
+        ...this.modules[moduleIndex],
+        fileCount: this.files.filter(
+          (storedFile) =>
+            storedFile.moduleId === normalizedFile.moduleId,
+        ).length,
+      };
     }
-    this.saveToStorage("files", this.files);
-    this.saveToStorage("modules", this.modules);
+
+    void this.saveToStorage("files", this.files);
+    void this.saveToStorage("modules", this.modules);
   }
 
-  deleteFile(id: string) {
-    const file = this.files.find((f) => f.id === id);
-    this.files = this.files.filter((f) => f.id !== id);
+  deleteFile(id: string): void {
+    const file = this.files.find(
+      (storedFile) => storedFile.id === id,
+    );
+
+    this.files = this.files.filter(
+      (storedFile) => storedFile.id !== id,
+    );
+
     if (file) {
-      const module = this.modules.find((m) => m.id === file.moduleId);
-      if (module) {
-        module.fileCount = this.files.filter(
-          (f) => f.moduleId === module.id,
-        ).length;
+      const moduleIndex = this.modules.findIndex(
+        (module) => module.id === file.moduleId,
+      );
+
+      if (moduleIndex !== -1) {
+        this.modules[moduleIndex] = {
+          ...this.modules[moduleIndex],
+          fileCount: this.files.filter(
+            (storedFile) =>
+              storedFile.moduleId === file.moduleId,
+          ).length,
+        };
       }
     }
-    this.saveToStorage("files", this.files);
-    this.saveToStorage("modules", this.modules);
+
+    void this.saveToStorage("files", this.files);
+    void this.saveToStorage("modules", this.modules);
   }
 
-  // Assessment methods
+  // ============================================================
+  // ASSESSMENT METHODS
+  // ============================================================
+
   getAssessments(): Assessment[] {
-    return this.assessments;
+    return [...this.assessments];
   }
 
-  addAssessment(assessment: Assessment) {
-    this.assessments.push(assessment);
-    this.saveToStorage("assessments", this.assessments);
+  addAssessment(assessment: Assessment): void {
+    this.assessments = [
+      ...this.assessments,
+      assessment,
+    ];
+
+    void this.saveToStorage(
+      "assessments",
+      this.assessments,
+    );
   }
 
-  updateAssessment(id: string, updates: Partial<Assessment>) {
-    const index = this.assessments.findIndex((a) => a.id === id);
+  updateAssessment(
+    id: string,
+    updates: Partial<Assessment>,
+  ): void {
+    const index = this.assessments.findIndex(
+      (assessment) => assessment.id === id,
+    );
+
     if (index !== -1) {
-      this.assessments[index] = { ...this.assessments[index], ...updates };
-      this.saveToStorage("assessments", this.assessments);
+      this.assessments[index] = {
+        ...this.assessments[index],
+        ...updates,
+      };
+
+      void this.saveToStorage(
+        "assessments",
+        this.assessments,
+      );
     }
   }
 
-  // Schedule methods
+  // ============================================================
+  // SCHEDULE METHODS
+  // ============================================================
+
   getSchedule(): ScheduleItem[] {
-    return this.schedule;
+    return [...this.schedule];
   }
 
-  addScheduleItem(item: ScheduleItem) {
-    this.schedule.push(item);
-    this.saveToStorage("schedule", this.schedule);
+  addScheduleItem(item: ScheduleItem): void {
+    this.schedule = [
+      ...this.schedule,
+      item,
+    ];
+
+    void this.saveToStorage(
+      "schedule",
+      this.schedule,
+    );
   }
 
-  deleteScheduleItem(id: string) {
-    this.schedule = this.schedule.filter((s) => s.id !== id);
-    this.saveToStorage("schedule", this.schedule);
+  deleteScheduleItem(id: string): void {
+    this.schedule = this.schedule.filter(
+      (scheduleItem) =>
+        scheduleItem.id !== id,
+    );
+
+    void this.saveToStorage(
+      "schedule",
+      this.schedule,
+    );
   }
 
-  // Attendance methods
+  // ============================================================
+  // ATTENDANCE METHODS
+  // ============================================================
+
   getAttendance(): AttendanceRecord[] {
-    return this.attendance;
+    return [...this.attendance];
   }
 
-  addAttendance(record: AttendanceRecord) {
-    this.attendance.push(record);
-    this.saveToStorage("attendance", this.attendance);
+  addAttendance(record: AttendanceRecord): void {
+    this.attendance = [
+      ...this.attendance,
+      record,
+    ];
+
+    void this.saveToStorage(
+      "attendance",
+      this.attendance,
+    );
   }
 
-  // User methods
+  // ============================================================
+  // USER METHODS
+  // ============================================================
+
   getUser(): User | null {
     return this.user;
   }
 
-  setUser(user: User) {
+  setUser(user: User): void {
     this.user = user;
-    this.saveToStorage("user", user);
+
+    void this.saveToStorage(
+      "user",
+      user,
+    );
   }
 
-  // Profile methods
+  // ============================================================
+  // PROFILE METHODS
+  // ============================================================
+
   getProfile(): UserProfile | null {
     return this.profile;
   }
 
-  setProfile(profile: UserProfile) {
+  setProfile(profile: UserProfile): void {
     this.profile = profile;
-    this.saveToStorage("profile", profile);
+
+    void this.saveToStorage(
+      "profile",
+      profile,
+    );
   }
 
-  clearAllData() {
+  // ============================================================
+  // CLEAR ALL DATA
+  // ============================================================
+
+  async clearAllData(): Promise<void> {
     this.modules = [];
     this.files = [];
     this.assessments = [];
@@ -233,7 +461,14 @@ class Store {
     this.user = null;
     this.profile = null;
 
-    AsyncStorage.clear();
+    try {
+      await AsyncStorage.clear();
+    } catch (error) {
+      console.error(
+        "Error clearing AsyncStorage:",
+        error,
+      );
+    }
   }
 }
 

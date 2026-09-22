@@ -2,9 +2,9 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 
 // Auth Screens
-import { VerifyEmailScreen } from "../screens/VerifyEmailScreen";
 import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
+import { VerifyEmailScreen } from "../screens/VerifyEmailScreen";
 
 // Main Screens
 import { AIChatScreen } from "../screens/AIChatScreen";

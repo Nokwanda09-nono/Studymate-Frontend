@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import { API_URL as CONFIG_API_URL } from "../config/api";
 
 const LOCAL_API_URL = Platform.OS === 'android'
-  ? 'http://10.0.2.2:5000/api'
+  ? 'http://localhost:5000/api'
   : 'http://localhost:5000/api';
 
 const API_URL = CONFIG_API_URL && CONFIG_API_URL !== 'https://study-mate-v1-ten.vercel.app/api'
