@@ -14,9 +14,10 @@ import { BottomNav } from "../components/ButtomNav";
 import { CustomCard } from "../components/CustomCard";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
+import React from "react";
 
 export function HomeScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { user } = useAuth();
   const { modules, schedule, assessments } = useStore();
 
@@ -40,9 +41,9 @@ export function HomeScreen() {
   const averageScore =
     completedAssessments.length > 0
       ? Math.round(
-        completedAssessments.reduce((sum, a) => sum + (a.score || 0), 0) /
-        completedAssessments.length
-      )
+          completedAssessments.reduce((sum, a) => sum + (a.score || 0), 0) /
+            completedAssessments.length
+        )
       : 0;
 
   // Format today's date
@@ -53,6 +54,16 @@ export function HomeScreen() {
       day: "numeric",
     };
     return new Date().toLocaleDateString(undefined, options);
+  };
+
+  // Safe navigation helper
+  const goTo = (screen: string) => {
+    console.log(`[HomeScreen] Navigating to ${screen}`);
+    try {
+      navigation.navigate(screen);
+    } catch (e) {
+      console.error(`[HomeScreen] Navigation to ${screen} failed:`, e);
+    }
   };
 
   return (
@@ -88,7 +99,9 @@ export function HomeScreen() {
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <CustomCard style={styles.statCard}>
-            <View style={[styles.statIconWrapper, { backgroundColor: "#e0e7ff" }]}>
+            <View
+              style={[styles.statIconWrapper, { backgroundColor: "#e0e7ff" }]}
+            >
               <Ionicons name="folder-open" size={22} color="#062e07ff" />
             </View>
             <Text style={styles.statNumber}>{modules.length}</Text>
@@ -96,7 +109,9 @@ export function HomeScreen() {
           </CustomCard>
 
           <CustomCard style={styles.statCard}>
-            <View style={[styles.statIconWrapper, { backgroundColor: "#dcfce7" }]}>
+            <View
+              style={[styles.statIconWrapper, { backgroundColor: "#dcfce7" }]}
+            >
               <Ionicons name="calendar" size={22} color="#22c55e" />
             </View>
             <Text style={styles.statNumber}>{todayClasses.length}</Text>
@@ -104,7 +119,9 @@ export function HomeScreen() {
           </CustomCard>
 
           <CustomCard style={styles.statCard}>
-            <View style={[styles.statIconWrapper, { backgroundColor: "#fef3c7" }]}>
+            <View
+              style={[styles.statIconWrapper, { backgroundColor: "#fef3c7" }]}
+            >
               <Ionicons name="trophy" size={22} color="#d97706" />
             </View>
             <Text style={styles.statNumber}>{averageScore}%</Text>
@@ -115,7 +132,7 @@ export function HomeScreen() {
         {/* Today's Schedule Preview */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{"Today's Classes"}</Text>
-          <TouchableOpacity onPress={() => (navigation.navigate as any)("Schedule")}>
+          <TouchableOpacity onPress={() => goTo("Schedule")}>
             <Text style={styles.seeAllText}>See Timetable</Text>
           </TouchableOpacity>
         </View>
@@ -131,7 +148,12 @@ export function HomeScreen() {
           <View style={styles.classesList}>
             {todayClasses.map((item) => (
               <CustomCard key={item.id} style={styles.classCard}>
-                <View style={[styles.classColorTag, { backgroundColor: item.color || "#6366f1" }]} />
+                <View
+                  style={[
+                    styles.classColorTag,
+                    { backgroundColor: item.color || "#6366f1" },
+                  ]}
+                />
                 <View style={styles.classCardBody}>
                   <Text style={styles.classTitle}>{item.title}</Text>
                   <View style={styles.classTimeRow}>
@@ -148,17 +170,21 @@ export function HomeScreen() {
         )}
 
         {/* Quick Access Actions */}
-        <Text style={[styles.sectionTitle, { marginTop: 24, marginBottom: 12 }]}>
+        <Text
+          style={[styles.sectionTitle, { marginTop: 24, marginBottom: 12 }]}
+        >
           Quick Actions
         </Text>
         <View style={styles.actionsGrid}>
           <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => (navigation.navigate as any)("AIChat")}
+            onPress={() => goTo("AIChat")}
+            activeOpacity={0.7}
           >
             <LinearGradient
               colors={["#f0fdf4", "#dcfce7"]}
               style={styles.actionBackground}
+              pointerEvents="none"
             >
               <Ionicons name="chatbubble-ellipses" size={28} color="#16a34a" />
               <Text style={styles.actionText}>AI Chat Buddy</Text>
@@ -167,11 +193,13 @@ export function HomeScreen() {
 
           <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => (navigation.navigate as any)("Modules")}
+            onPress={() => goTo("Modules")}
+            activeOpacity={0.7}
           >
             <LinearGradient
               colors={["#eef2ff", "#e0e7ff"]}
               style={styles.actionBackground}
+              pointerEvents="none"
             >
               <Ionicons name="book" size={28} color="#4f46e5" />
               <Text style={styles.actionText}>Study Modules</Text>
@@ -180,11 +208,13 @@ export function HomeScreen() {
 
           <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => (navigation.navigate as any)("Schedule")}
+            onPress={() => goTo("Schedule")}
+            activeOpacity={0.7}
           >
             <LinearGradient
               colors={["#faf5ff", "#f3e8ff"]}
               style={styles.actionBackground}
+              pointerEvents="none"
             >
               <Ionicons name="time" size={28} color="#9333ea" />
               <Text style={styles.actionText}>Check Timetable</Text>
@@ -193,14 +223,13 @@ export function HomeScreen() {
 
           <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => {
-              // Navigate to schedule, and let it know we want assessments tab (optional state but navigates)
-              (navigation.navigate as any)("Schedule");
-            }}
+            onPress={() => goTo("Schedule")}
+            activeOpacity={0.7}
           >
             <LinearGradient
               colors={["#fff7ed", "#ffedd5"]}
               style={styles.actionBackground}
+              pointerEvents="none"
             >
               <Ionicons name="sparkles" size={28} color="#ea580c" />
               <Text style={styles.actionText}>Take Assessments</Text>

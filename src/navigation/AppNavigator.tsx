@@ -1,4 +1,5 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import React from "react";
 import { useAuth } from "../context/AuthContext";
 
 // Auth Screens
@@ -8,6 +9,7 @@ import { VerifyEmailScreen } from "../screens/VerifyEmailScreen";
 
 // Main Screens
 import { AIChatScreen } from "../screens/AIChatScreen";
+import { FileViewerScreen } from "../screens/FileViewerScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { ModuleDetailScreen } from "../screens/ModuleDetailScreen";
 import { ModulesScreen } from "../screens/ModulesScreen";
@@ -45,6 +47,7 @@ export function AppNavigator() {
           <Stack.Screen name="Schedule" component={ScheduleScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="PDFViewer" component={PDFViewerScreen} />
+          <Stack.Screen name="FileViewer" component={FileViewerScreen} />
         </>
       )}
     </Stack.Navigator>
