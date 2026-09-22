@@ -1,20 +1,20 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useAuth } from '../context/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useState } from 'react';
+import {
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { CustomButton } from '../components/CustomButton';
+import { useAuth } from '../context/AuthContext';
 
 export function RegisterScreen() {
   const navigation = useNavigation<any>();
@@ -186,24 +186,34 @@ export function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   keyboardView: {
     flex: 1,
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 560 : '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 16,
+    alignItems: 'center',
+    width: '100%',
+    padding: Platform.OS === 'web' ? 24 : 16,
   },
   card: {
+    width: '100%',
+    maxWidth: 520,
     backgroundColor: 'white',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 12,
+    elevation: 4,
   },
   iconContainer: {
     width: 64,

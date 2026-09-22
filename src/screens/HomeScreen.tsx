@@ -1,19 +1,19 @@
-import React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { BottomNav } from "../components/ButtomNav";
+import { CustomCard } from "../components/CustomCard";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
-import { CustomCard } from "../components/CustomCard";
-import { BottomNav } from "../components/ButtomNav";
-import { LinearGradient } from "expo-linear-gradient";
 
 export function HomeScreen() {
   const navigation = useNavigation();
@@ -218,11 +218,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f9fafb",
+    alignItems: "center",
   },
   scrollView: {
     flex: 1,
+    width: "100%",
   },
   scrollContent: {
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 1200 : "100%",
+    alignSelf: "center",
     padding: 20,
     paddingBottom: 90,
   },

@@ -1,8 +1,8 @@
 // src/components/ButtomNav.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 // Define the navigation param list
 type RootStackParamList = {
@@ -67,9 +67,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#e5e7eb",
     paddingVertical: 8,
-    paddingBottom: 20,
+    paddingBottom: Platform.OS === "web" ? 12 : 20,
     paddingHorizontal: 8,
     justifyContent: "space-around",
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 560 : "100%",
+    alignSelf: "center",
   },
   navItem: {
     alignItems: "center",

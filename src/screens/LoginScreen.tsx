@@ -1,18 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { CustomButton } from '../components/CustomButton';
 import { useAuth } from '../context/AuthContext';
@@ -106,86 +106,88 @@ export function LoginScreen() {
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <Ionicons name="school" size={40} color="white" />
-            </View>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Login to continue your study journey</Text>
-          </View>
-
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#9ca3af" />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                editable={!loading}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#9ca3af" />
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                placeholder="Password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                editable={!loading}
-              />
-              <TouchableOpacity 
-                onPress={() => setShowPassword(!showPassword)}
-                disabled={loading}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color="#9ca3af"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity 
-              style={styles.forgotPassword}
-              disabled={loading}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
-            </TouchableOpacity>
-
-            <CustomButton
-              title="Login"
-              onPress={handleLogin}
-              loading={loading}
-              size="large"
-              style={styles.loginButton}
-            />
-
-            {resendLoading && (
-              <View style={styles.resendLoadingContainer}>
-                <ActivityIndicator size="small" color="#6366f1" />
-                <Text style={styles.resendLoadingText}>Sending verification email...</Text>
+          <View style={styles.card}>
+            <View style={styles.header}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="school" size={40} color="white" />
               </View>
-            )}
-
-            <View style={styles.dividerContainer}>
-              <View style={styles.divider} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.divider} />
+              <Text style={styles.title}>Welcome Back</Text>
+              <Text style={styles.subtitle}>Login to continue your study journey</Text>
             </View>
 
-            <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>Don't have an account? </Text>
+            <View style={styles.form}>
+              <View style={styles.inputContainer}>
+                <Ionicons name="mail-outline" size={20} color="#9ca3af" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!loading}
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color="#9ca3af" />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  editable={!loading}
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowPassword(!showPassword)}
+                  disabled={loading}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color="#9ca3af"
+                  />
+                </TouchableOpacity>
+              </View>
+
               <TouchableOpacity 
-                onPress={() => navigation.navigate('Register')}
+                style={styles.forgotPassword}
                 disabled={loading}
               >
-                <Text style={styles.registerLink}>Sign Up</Text>
+                <Text style={styles.forgotPasswordText}>Forgot password?</Text>
               </TouchableOpacity>
+
+              <CustomButton
+                title="Login"
+                onPress={handleLogin}
+                loading={loading}
+                size="large"
+                style={styles.loginButton}
+              />
+
+              {resendLoading && (
+                <View style={styles.resendLoadingContainer}>
+                  <ActivityIndicator size="small" color="#6366f1" />
+                  <Text style={styles.resendLoadingText}>Sending verification email...</Text>
+                </View>
+              )}
+
+              <View style={styles.dividerContainer}>
+                <View style={styles.divider} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.divider} />
+              </View>
+
+              <View style={styles.registerContainer}>
+                <Text style={styles.registerText}>Don't have an account? </Text>
+                <TouchableOpacity 
+                  onPress={() => navigation.navigate('Register')}
+                  disabled={loading}
+                >
+                  <Text style={styles.registerLink}>Sign Up</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -197,14 +199,34 @@ export function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   keyboardView: {
     flex: 1,
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 520 : '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 16,
+    alignItems: 'center',
+    width: '100%',
+    padding: Platform.OS === 'web' ? 24 : 16,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 480,
+    backgroundColor: 'white',
+    borderRadius: 18,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
   },
   header: {
     alignItems: 'center',
