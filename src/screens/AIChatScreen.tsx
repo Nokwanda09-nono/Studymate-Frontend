@@ -1,16 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
+    ActivityIndicator,
+    FlatList,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { BottomNav } from '../components/ButtomNav';
 import { CustomButton } from '../components/CustomButton';
 
 interface Message {
@@ -89,50 +90,54 @@ export function AIChatScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>AI Study Assistant</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>AI Study Assistant</Text>
+        </View>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        >
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.messagesList}
+            showsVerticalScrollIndicator={false}
+          />
+
+          {isTyping && (
+            <View style={styles.typingIndicator}>
+              <ActivityIndicator size="small" color="#6366f1" />
+              <Text style={styles.typingText}>AI is typing...</Text>
+            </View>
+          )}
+
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Ask me anything about your studies..."
+              value={input}
+              onChangeText={setInput}
+              multiline
+              maxLength={500}
+            />
+            <CustomButton
+              title="Send"
+              onPress={handleSend}
+              size="small"
+              style={styles.sendButton}
+              disabled={!input.trim()}
+            />
+          </View>
+        </KeyboardAvoidingView>
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.messagesList}
-          showsVerticalScrollIndicator={false}
-        />
-
-        {isTyping && (
-          <View style={styles.typingIndicator}>
-            <ActivityIndicator size="small" color="#6366f1" />
-            <Text style={styles.typingText}>AI is typing...</Text>
-          </View>
-        )}
-
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Ask me anything about your studies..."
-            value={input}
-            onChangeText={setInput}
-            multiline
-            maxLength={500}
-          />
-          <CustomButton
-            title="Send"
-            onPress={handleSend}
-            size="small"
-            style={styles.sendButton}
-            disabled={!input.trim()}
-          />
-        </View>
-      </KeyboardAvoidingView>
+      <BottomNav />
     </SafeAreaView>
   );
 }
@@ -141,6 +146,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',
+  },
+  content: {
+    flex: 1,
   },
   header: {
     backgroundColor: 'white',
@@ -246,4 +254,4 @@ const styles = StyleSheet.create({
   sendButton: {
     paddingHorizontal: 16,
   },
-});
+});
