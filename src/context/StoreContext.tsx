@@ -1,21 +1,21 @@
 // src/context/StoreContext.tsx
 
 import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
+    createContext,
+    useContext,
+    useEffect,
+    useState,
 } from "react";
 
 import {
-  Assessment,
-  AttendanceRecord,
-  FileItem,
-  Module,
-  ScheduleItem,
-  store,
-  User,
-  UserProfile,
+    Assessment,
+    AttendanceRecord,
+    FileItem,
+    Module,
+    ScheduleItem,
+    store,
+    User,
+    UserProfile,
 } from "../lib/store";
 
 interface StoreContextType {

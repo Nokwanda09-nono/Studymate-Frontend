@@ -2,11 +2,11 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-  INITIAL_STUDY_POINTS,
-  LOW_POINTS_THRESHOLD,
-  MISSED_SESSION_DEDUCTION,
-  clampStudyPoints,
-  getStudyTier,
+    INITIAL_STUDY_POINTS,
+    LOW_POINTS_THRESHOLD,
+    MISSED_SESSION_DEDUCTION,
+    clampStudyPoints,
+    getStudyTier,
 } from "../utils/studyPoints";
 
 export interface User {

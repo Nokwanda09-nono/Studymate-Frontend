@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   Dimensions,
   FlatList,
   Modal,
@@ -12,7 +13,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Animated,
 } from "react-native";
 import { BottomNav } from "../components/ButtomNav";
 import { useAuth } from "../context/AuthContext";
