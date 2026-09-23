@@ -1,10 +1,11 @@
+// src/screens/ModuleDetailScreen.tsx
 import { Ionicons } from "@expo/vector-icons";
 import {
     useNavigation,
     useRoute,
 } from "@react-navigation/native";
 import * as DocumentPicker from "expo-document-picker";
-import { useState } from "react";
+import React, { useState } from "react";
 import {
     Alert,
     RefreshControl,
@@ -16,10 +17,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import React from "react";
 import { CustomButton } from "../components/CustomButton";
 import { CustomCard } from "../components/CustomCard";
 import { useStore } from "../context/StoreContext";
+import {
+    deletePersistedFile,
+    persistPickedFile,
+} from "../lib/fileStorage";
 
 // ---------------------------------------------------------
 // Supported document types
@@ -52,7 +56,7 @@ const DOCUMENT_TYPES = [
 // ---------------------------------------------------------
 
 export function ModuleDetailScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute();
 
   const { id } = route.params as {
@@ -180,8 +184,18 @@ export function ModuleDetailScreen() {
 
         for (const file of selectedFiles) {
           try {
+            // Copy the picked file into permanent app storage
+            // so the URI doesn't get wiped when the OS clears
+            // the cache directory.
+            const permanentUri =
+              await persistPickedFile({
+                uri: file.uri,
+                name:
+                  file.name ||
+                  "Untitled file",
+              });
+
             /*
-             * IMPORTANT:
              * uploadedAt is stored as an ISO string because
              * AsyncStorage serializes JSON.
              */
@@ -204,12 +218,10 @@ export function ModuleDetailScreen() {
                 file.size ?? 0,
 
               /*
-               * This URI is important.
-               *
-               * Later the AI document-processing system
-               * will use this URI to access the document.
+               * Permanent URI. The AI document-processing
+               * system will use this later.
                */
-              uri: file.uri,
+              uri: permanentUri,
 
               uploadedAt:
                 new Date().toISOString(),
@@ -279,8 +291,20 @@ export function ModuleDetailScreen() {
           text: "Delete",
           style: "destructive",
 
-          onPress: () => {
+          onPress: async () => {
             try {
+              const target = files.find(
+                (f) => f.id === fileId
+              );
+
+              // Remove the physical file first.
+              if (target?.uri) {
+                await deletePersistedFile(
+                  target.uri
+                );
+              }
+
+              // Then remove the metadata from the store.
               deleteFile(fileId);
             } catch (error) {
               console.error(
@@ -489,80 +513,15 @@ export function ModuleDetailScreen() {
   };
 
   // -------------------------------------------------------
-  // File press
+  // File press — navigate to FileViewer
   // -------------------------------------------------------
 
-  const handleFilePress = (
-    file: {
-      id: string;
-      name: string;
-      type: string;
-      uri: string;
-    }
-  ) => {
-    const fileType =
-      file.type?.toLowerCase() ||
-      "";
-
-    if (
-      fileType.includes("pdf")
-    ) {
-      (
-        navigation.navigate as any
-      )("PDFViewer", {
-        fileId: file.id,
-      });
-
-      return;
-    }
-
-    if (
-      fileType.includes("image")
-    ) {
-      Alert.alert(
-        "Image Preview",
-        `Image selected: ${file.name}`
-      );
-
-      return;
-    }
-
-    if (
-      fileType.includes(
-        "word"
-      ) ||
-      fileType.includes(
-        "document"
-      )
-    ) {
-      Alert.alert(
-        "Document",
-        `${file.name} is ready to be processed.`
-      );
-
-      return;
-    }
-
-    if (
-      fileType.includes(
-        "powerpoint"
-      ) ||
-      fileType.includes(
-        "presentation"
-      )
-    ) {
-      Alert.alert(
-        "Presentation",
-        `${file.name} is ready to be processed.`
-      );
-
-      return;
-    }
-
-    Alert.alert(
-      "File",
-      `${file.name} is ready to be processed.`
-    );
+  const handleFilePress = (file: {
+    id: string;
+  }) => {
+    navigation.navigate("FileViewer", {
+      id: file.id,
+    });
   };
 
   // -------------------------------------------------------

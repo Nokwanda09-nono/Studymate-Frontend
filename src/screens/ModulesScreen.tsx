@@ -1,8 +1,9 @@
+// src/screens/ModulesScreen.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
-import { useState } from "react";
+import React, { useState } from "react";
 import {
     Alert,
     FlatList,
@@ -15,12 +16,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import React from "react";
+
 import { AnimatedModal } from "../components/AnimatedModal";
 import { BottomNav } from "../components/ButtomNav";
 import { CustomButton } from "../components/CustomButton";
 import { CustomCard } from "../components/CustomCard";
 import { useStore } from "../context/StoreContext";
+import { persistPickedFile } from "../lib/fileStorage";
 import { Module } from "../lib/store";
 
 // ---------------------------------------------------------
@@ -31,6 +33,7 @@ type RootStackParamList = {
   Home: undefined;
   Modules: undefined;
   ModuleDetail: { id: string };
+  FileViewer: { id: string };
   Schedule: undefined;
   AIChat: undefined;
   Profile: undefined;
@@ -201,6 +204,17 @@ export function ModulesScreen() {
 
       for (const file of selectedFiles) {
         try {
+          // Copy the picked file into permanent app storage
+          // so the URI doesn't get wiped when the OS clears
+          // the cache directory.
+          const permanentUri =
+            await persistPickedFile({
+              uri: file.uri,
+              name:
+                file.name ||
+                "Untitled file",
+            });
+
           /*
            * Every uploaded file gets:
            * - a unique ID
@@ -208,13 +222,11 @@ export function ModulesScreen() {
            * - its original name
            * - MIME type
            * - size
-           * - local URI
+           * - permanent local URI
            * - ISO upload timestamp
            */
           const newFile = {
-            id: `${moduleId}-${Date.now()}-${Math.random()
-              .toString(36)
-              .substring(2, 10)}`,
+            id: `${moduleId}-${permanentUri}`,
 
             moduleId,
 
@@ -229,7 +241,7 @@ export function ModulesScreen() {
             size:
               file.size ?? 0,
 
-            uri: file.uri,
+            uri: permanentUri,
 
             uploadedAt:
               new Date().toISOString(),
@@ -398,8 +410,8 @@ export function ModulesScreen() {
           style={styles.headerSection}
         >
           <Text style={styles.title}>
-            Let's Study
-          </Text>
+  {"Let's Study"}
+</Text>
 
           <Text
             style={styles.subtitle}

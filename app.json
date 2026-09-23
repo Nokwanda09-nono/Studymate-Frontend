@@ -12,7 +12,8 @@
         {
           "backgroundColor": "#208AEF"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "ios": {
       "bundleIdentifier": "com.yourcompany.studymate"
@@ -27,7 +28,10 @@
               "scheme": "studymate"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     }
