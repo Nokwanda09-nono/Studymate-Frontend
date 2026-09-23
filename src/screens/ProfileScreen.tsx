@@ -1,21 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Dimensions,
+  FlatList,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  Animated,
 } from "react-native";
 import { BottomNav } from "../components/ButtomNav";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
+import { getStudyTier } from "../utils/studyPoints";
 
 const { width } = Dimensions.get("window");
 
@@ -37,9 +39,107 @@ interface EditableProfile {
   studyChallenges: string[];
 }
 
+const AVATAR_OPTIONS = [
+  { id: "default", label: "Default", emoji: "", color: "#dbeafe" },
+  { id: "fox", label: "Fox", emoji: "🦊", color: "#fed7aa" },
+  { id: "panda", label: "Panda", emoji: "🐼", color: "#e0e7ff" },
+  { id: "rabbit", label: "Rabbit", emoji: "🐰", color: "#fbcfe8" },
+  { id: "tiger", label: "Tiger", emoji: "🐯", color: "#fde68a" },
+  { id: "penguin", label: "Penguin", emoji: "🐧", color: "#bfdbfe" },
+  { id: "robot", label: "Robot", emoji: "🤖", color: "#bae6fd" },
+  { id: "wizard", label: "Wizard", emoji: "🧙", color: "#ddd6fe" },
+  { id: "astronaut", label: "Astronaut", emoji: "🧑‍🚀", color: "#cffafe" },
+  { id: "artist", label: "Artist", emoji: "🎨", color: "#fecdd3" },
+];
+
+function MetallicStudyBadge({ tier }: { tier: ReturnType<typeof getStudyTier> }) {
+  const shine = useRef(new Animated.Value(-1)).current;
+  const orbit = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const shineAnimation = Animated.loop(
+      Animated.timing(shine, {
+        toValue: 1,
+        duration: 2600,
+        useNativeDriver: true,
+      }),
+    );
+    const orbitAnimation = Animated.loop(
+      Animated.timing(orbit, {
+        toValue: 1,
+        duration: 8000,
+        useNativeDriver: true,
+      }),
+    );
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.06, duration: 1200, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 1200, useNativeDriver: true }),
+      ]),
+    );
+    shineAnimation.start();
+    orbitAnimation.start();
+    pulseAnimation.start();
+    return () => {
+      shineAnimation.stop();
+      orbitAnimation.stop();
+      pulseAnimation.stop();
+    };
+  }, [orbit, pulse, shine]);
+
+  const shineX = shine.interpolate({
+    inputRange: [-1, 1],
+    outputRange: [-90, 170],
+  });
+  const orbitRotation = orbit.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <View style={styles.badgeArtwork}>
+      <Animated.View
+        style={[
+          styles.badgeOrbit,
+          {
+            borderColor: tier.colors[1],
+            transform: [{ rotate: orbitRotation }, { scale: pulse }],
+          },
+        ]}
+      >
+        <View style={[styles.badgeSpark, styles.badgeSparkTop, { backgroundColor: tier.colors[0] }]} />
+        <View style={[styles.badgeSpark, styles.badgeSparkBottom, { backgroundColor: tier.colors[0] }]} />
+      </Animated.View>
+      <LinearGradient
+        colors={tier.colors}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.metalBadge}
+      >
+        <Ionicons name="trophy" size={22} color="#fff7d6" style={styles.badgeCrown} />
+        <View style={styles.badgeInner}>
+          <Ionicons name="shield" size={58} color="rgba(255,255,255,0.38)" />
+          <Ionicons name="star" size={31} color="#fff7d6" style={styles.badgeStar} />
+          <Ionicons
+            name="ribbon"
+            size={54}
+            color="rgba(255,255,255,0.72)"
+            style={styles.badgeRibbon}
+          />
+        </View>
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.badgeShine, { transform: [{ translateX: shineX }, { rotate: "25deg" }] }]}
+        />
+      </LinearGradient>
+    </View>
+  );
+}
+
 export function ProfileScreen() {
   const { logout, user: authUser, updateUser } = useAuth();
-  const { profile, setProfile } = useStore();
+  const { profile, setProfile, modules, assessments } = useStore();
 
   const normalizeAcademicLevel = (value?: string) => {
     if (!value) return "";
@@ -75,6 +175,7 @@ export function ProfileScreen() {
   });
 
   const [showDropdown, setShowDropdown] = useState<string | null>(null);
+  const [avatarPickerVisible, setAvatarPickerVisible] = useState(false);
   const [dropdownOptions, setDropdownOptions] = useState<DropdownOption[]>([]);
   const [dropdownField, setDropdownField] = useState<string>("");
 
@@ -215,6 +316,20 @@ export function ProfileScreen() {
       });
       setShowDropdown(null);
     }
+  };
+
+  const selectedAvatarId = mergedProfile?.selectedAvatar || "default";
+  const selectedAvatar = AVATAR_OPTIONS.find((avatar) => avatar.id === selectedAvatarId) || AVATAR_OPTIONS[0];
+
+  const handleAvatarSelect = async (avatarId: string) => {
+    const nextProfile = {
+      ...(profile || userProf),
+      selectedAvatar: avatarId,
+    };
+
+    setProfile(nextProfile);
+    await updateUser({ profile: nextProfile });
+    setAvatarPickerVisible(false);
   };
 
   const handleSave = async () => {
@@ -374,6 +489,53 @@ export function ProfileScreen() {
     );
   };
 
+  const moduleReports = modules.map((module) => {
+    const moduleAssessments = assessments.filter(
+      (assessment) => assessment.moduleId === module.id,
+    );
+
+    const scoredAssessments = moduleAssessments.filter(
+      (assessment) => typeof assessment.score === "number",
+    );
+
+    const completedAssessments = moduleAssessments.filter(
+      (assessment) => assessment.completed,
+    );
+
+    const averageScore = scoredAssessments.length
+      ? Math.round(
+          scoredAssessments.reduce(
+            (sum, assessment) => sum + (assessment.score ?? 0),
+            0,
+          ) / scoredAssessments.length,
+        )
+      : 0;
+
+    const progress = moduleAssessments.length
+      ? Math.min(
+          100,
+          Math.round(
+            (completedAssessments.length / moduleAssessments.length) * 100,
+          ),
+        )
+      : 0;
+
+    return {
+      module,
+      progress,
+      averageScore,
+      assessments: moduleAssessments,
+      completedAssessments: completedAssessments.length,
+    };
+  });
+
+  const studyPoints = typeof profile?.studyPoints === "number"
+    ? profile.studyPoints
+    : typeof mergedProfile?.studyPoints === "number"
+      ? mergedProfile.studyPoints
+      : 1000;
+  const studyTier = getStudyTier(studyPoints);
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -387,9 +549,20 @@ export function ProfileScreen() {
           end={{ x: 1, y: 1 }}
           style={styles.profileHeader}
         >
-          <View style={styles.avatarContainer}>
-            <Ionicons name="person" size={50} color="white" />
-          </View>
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            onPress={() => setAvatarPickerVisible(true)}
+            activeOpacity={0.85}
+          >
+            {selectedAvatar.emoji ? (
+              <Text style={styles.avatarEmoji}>{selectedAvatar.emoji}</Text>
+            ) : (
+              <Ionicons name="person" size={50} color="white" />
+            )}
+            <View style={styles.avatarEditBadge}>
+              <Ionicons name="camera" size={13} color="#123d1a" />
+            </View>
+          </TouchableOpacity>
           <Text style={styles.userName}>{getDisplayName()}</Text>
           <View style={styles.roleBadge}>
             <Ionicons name="school-outline" size={14} color="#c4b5fd" />
@@ -411,6 +584,26 @@ export function ProfileScreen() {
             </TouchableOpacity>
           )}
         </LinearGradient>
+
+        {/* Study points */}
+        <View style={styles.pointsCard}>
+          <View style={styles.pointsArtworkWrap}>
+            <MetallicStudyBadge tier={studyTier} />
+          </View>
+          <View style={styles.pointsInfo}>
+            <Text style={styles.pointsEyebrow}>STUDY RANK</Text>
+            <Text style={styles.pointsTier}>{studyTier.label}</Text>
+            <View style={styles.pointsValueRow}>
+              <Text style={styles.pointsValue}>{studyPoints}</Text>
+              <Text style={styles.pointsUnit}> points</Text>
+            </View>
+            <Text style={styles.pointsHint}>
+              {studyPoints <= 100
+                ? "Your points are critically low. Attend sessions to avoid account action."
+                : "Keep your scheduled sessions attended to protect your points."}
+            </Text>
+          </View>
+        </View>
 
         {/* Personal Information */}
         <View style={styles.section}>
@@ -447,6 +640,67 @@ export function ProfileScreen() {
                   "person-outline",
                 )}
               </>
+            )}
+          </View>
+        </View>
+
+        {/* Study Reports */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="bar-chart-outline" size={20} color="#0e3a2c" />
+            <Text style={styles.sectionTitle}>Study Reports</Text>
+          </View>
+          <View style={styles.sectionContent}>
+            {moduleReports.length === 0 ? (
+              <View style={styles.emptyReportState}>
+                <Ionicons name="document-outline" size={36} color="#d1d5db" />
+                <Text style={styles.emptyReportText}>
+                  No modules yet. Add a module and complete study activities to see your progress here.
+                </Text>
+              </View>
+            ) : (
+              moduleReports.map(({ module, progress, averageScore, completedAssessments }) => (
+                <View key={module.id} style={styles.reportItem}>
+                  <View style={styles.reportHeaderRow}>
+                    <View style={styles.reportTitleWrap}>
+                      <View
+                        style={[
+                          styles.reportIcon,
+                          { backgroundColor: `${module.color}22` },
+                        ]}
+                      >
+                        <Ionicons
+                          name={(module.icon || "book-outline") as any}
+                          size={18}
+                          color={module.color}
+                        />
+                      </View>
+                      <View style={styles.reportTextWrap}>
+                        <Text style={styles.reportTitle}>{module.name}</Text>
+                        <Text style={styles.reportMetaText}>
+                          {completedAssessments} assessment
+                          {completedAssessments === 1 ? "" : "s"} completed
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.reportScoreText}>{averageScore}%</Text>
+                  </View>
+
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${Math.max(progress, 8)}%`, backgroundColor: module.color },
+                      ]}
+                    />
+                  </View>
+
+                  <View style={styles.reportFooterRow}>
+                    <Text style={styles.reportFooterText}>Progress</Text>
+                    <Text style={styles.reportFooterValue}>{progress}%</Text>
+                  </View>
+                </View>
+              ))
             )}
           </View>
         </View>
@@ -676,6 +930,63 @@ export function ProfileScreen() {
         </TouchableOpacity>
       </Modal>
 
+      <Modal
+        visible={avatarPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAvatarPickerVisible(false)}
+      >
+        <View style={styles.avatarModalOverlay}>
+          <View style={styles.avatarModalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Choose your avatar</Text>
+                <Text style={styles.avatarModalSubtitle}>Your default avatar is always available.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setAvatarPickerVisible(false)}>
+                <Ionicons name="close" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={AVATAR_OPTIONS}
+              numColumns={4}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.avatarGrid}
+              renderItem={({ item }) => {
+                const isSelected = item.id === selectedAvatarId;
+                return (
+                  <TouchableOpacity
+                    style={styles.avatarOption}
+                    onPress={() => void handleAvatarSelect(item.id)}
+                    activeOpacity={0.8}
+                  >
+                    <View
+                      style={[
+                        styles.avatarOptionCircle,
+                        { backgroundColor: item.color },
+                        isSelected && styles.avatarOptionSelected,
+                      ]}
+                    >
+                      {item.emoji ? (
+                        <Text style={styles.avatarOptionEmoji}>{item.emoji}</Text>
+                      ) : (
+                        <Ionicons name="person" size={30} color="#ffffff" />
+                      )}
+                      {isSelected && (
+                        <View style={styles.avatarCheckBadge}>
+                          <Ionicons name="checkmark" size={12} color="#ffffff" />
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.avatarOptionLabel}>{item.label}</Text>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
+
       <BottomNav />
     </View>
   );
@@ -706,6 +1017,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 3,
     borderColor: "rgba(255, 255, 255, 0.4)",
+  },
+  avatarEmoji: {
+    fontSize: 52,
+  },
+  avatarEditBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 27,
+    height: 27,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 2,
+    borderColor: "#21632a",
   },
   userName: {
     fontSize: 24,
@@ -769,6 +1096,131 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  pointsCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#10251f",
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 18,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  pointsArtworkWrap: {
+    width: 108,
+    height: 108,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+  badgeArtwork: {
+    width: 96,
+    height: 96,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeOrbit: {
+    position: "absolute",
+    width: 92,
+    height: 58,
+    borderWidth: 2,
+    borderRadius: 46,
+    opacity: 0.9,
+  },
+  badgeSpark: {
+    position: "absolute",
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  badgeSparkTop: {
+    top: -3,
+    left: 44,
+  },
+  badgeSparkBottom: {
+    bottom: -3,
+    right: 15,
+  },
+  metalBadge: {
+    width: 74,
+    height: 74,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 4,
+    borderColor: "rgba(255,255,255,0.78)",
+    overflow: "hidden",
+    shadowColor: "#fef3c7",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  badgeInner: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeCrown: {
+    position: "absolute",
+    top: 3,
+    zIndex: 2,
+  },
+  badgeStar: {
+    position: "absolute",
+    zIndex: 2,
+    top: 22,
+  },
+  badgeRibbon: {
+    position: "absolute",
+    opacity: 0.55,
+    top: 17,
+  },
+  badgeShine: {
+    position: "absolute",
+    width: 18,
+    height: 140,
+    backgroundColor: "rgba(255,255,255,0.58)",
+  },
+  pointsInfo: {
+    flex: 1,
+  },
+  pointsEyebrow: {
+    fontSize: 11,
+    letterSpacing: 1.5,
+    color: "#b7c9bf",
+    fontWeight: "700",
+  },
+  pointsTier: {
+    marginTop: 2,
+    fontSize: 24,
+    color: "#ffffff",
+    fontWeight: "800",
+  },
+  pointsValueRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    marginTop: 3,
+  },
+  pointsValue: {
+    fontSize: 20,
+    color: "#fef3c7",
+    fontWeight: "800",
+  },
+  pointsUnit: {
+    fontSize: 13,
+    color: "#d1d5db",
+  },
+  pointsHint: {
+    marginTop: 7,
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#b7c9bf",
+  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -784,6 +1236,86 @@ const styles = StyleSheet.create({
   },
   sectionContent: {
     padding: 16,
+  },
+  emptyReportState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+  },
+  emptyReportText: {
+    marginTop: 12,
+    fontSize: 13,
+    color: "#6b7280",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  reportItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  reportHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  reportTitleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+  },
+  reportIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reportTextWrap: {
+    flex: 1,
+  },
+  reportTitle: {
+    fontSize: 15,
+    color: "#111827",
+    fontWeight: "600",
+  },
+  reportMetaText: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 2,
+  },
+  reportScoreText: {
+    fontSize: 14,
+    color: "#0f766e",
+    fontWeight: "700",
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#e5e7eb",
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  reportFooterRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  reportFooterText: {
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  reportFooterValue: {
+    fontSize: 12,
+    color: "#111827",
+    fontWeight: "600",
   },
   viewField: {
     paddingVertical: 10,
@@ -913,6 +1445,73 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: "70%",
+  },
+  avatarModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(5, 15, 10, 0.62)",
+    justifyContent: "flex-end",
+  },
+  avatarModalContent: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    minHeight: 360,
+    maxHeight: "72%",
+  },
+  avatarModalSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  avatarGrid: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 28,
+  },
+  avatarOption: {
+    width: "25%",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  avatarOptionCircle: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.8)",
+    shadowColor: "#123d1a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  avatarOptionSelected: {
+    borderColor: "#166534",
+    transform: [{ scale: 1.08 }],
+  },
+  avatarOptionEmoji: {
+    fontSize: 34,
+  },
+  avatarCheckBadge: {
+    position: "absolute",
+    right: -3,
+    bottom: -3,
+    width: 21,
+    height: 21,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#166534",
+    borderWidth: 2,
+    borderColor: "#ffffff",
+  },
+  avatarOptionLabel: {
+    marginTop: 6,
+    fontSize: 11,
+    color: "#374151",
+    textAlign: "center",
   },
   modalHeader: {
     flexDirection: "row",

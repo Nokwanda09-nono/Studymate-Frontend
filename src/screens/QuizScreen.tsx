@@ -43,7 +43,7 @@ export function QuizScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { id } = route.params as { id: string };
-  const { assessments, updateAssessment } = useStore();
+  const { assessments, schedule, attendance, updateAssessment, addAttendance } = useStore();
   
   const assessment = assessments.find(a => a.id === id);
   const [questions] = useState(() => generateMockQuestions(assessment?.questionCount || 10));
@@ -93,6 +93,27 @@ export function QuizScreen() {
       completed: true,
       score: score,
     });
+
+    const now = new Date();
+    const todayKey = now.toISOString().slice(0, 10);
+    const dayOfWeek = (now.getDay() + 6) % 7;
+    const matchingSession = schedule.find(
+      (item) => item.moduleId === assessment.moduleId && item.dayOfWeek === dayOfWeek,
+    );
+
+    if (
+      matchingSession &&
+      !attendance.some(
+        (record) => record.scheduleId === matchingSession.id && record.date === todayKey,
+      )
+    ) {
+      addAttendance({
+        id: `attendance-${matchingSession.id}-${todayKey}`,
+        scheduleId: matchingSession.id,
+        date: todayKey,
+        status: "present",
+      });
+    }
 
     setShowResults(true);
   };
@@ -471,4 +492,4 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     marginBottom: 16,
   },
-});
+});

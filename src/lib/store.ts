@@ -1,6 +1,13 @@
 // src/lib/store.ts
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  INITIAL_STUDY_POINTS,
+  LOW_POINTS_THRESHOLD,
+  MISSED_SESSION_DEDUCTION,
+  clampStudyPoints,
+  getStudyTier,
+} from "../utils/studyPoints";
 
 export interface User {
   id: string;
@@ -26,6 +33,8 @@ export interface UserProfile {
   selectedAvatar?: string;
   lowPointsAlertSent?: boolean;
   accountDeletionWarning?: boolean;
+  pointsInitialized?: boolean;
+  lastPointsEvaluationDate?: string;
 }
 
 export interface Module {
@@ -412,6 +421,90 @@ class Store {
       "attendance",
       this.attendance,
     );
+  }
+
+  initializeStudyPoints(profile: UserProfile = {}): UserProfile {
+    if (typeof profile.studyPoints === "number") {
+      return {
+        ...profile,
+        studyTier: profile.studyTier || getStudyTier(profile.studyPoints).name,
+        pointsInitialized: true,
+      };
+    }
+
+    return {
+      ...profile,
+      studyPoints: INITIAL_STUDY_POINTS,
+      studyTier: getStudyTier(INITIAL_STUDY_POINTS).name,
+      pointsInitialized: true,
+      lowPointsAlertSent: false,
+      accountDeletionWarning: false,
+    };
+  }
+
+  evaluateMissedSessions(now = new Date()): UserProfile | null {
+    if (!this.profile || !this.schedule.length) {
+      return this.profile;
+    }
+
+    const currentDate = new Date(now);
+    const today = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      currentDate.getDate(),
+    );
+    const lastEvaluation = this.profile.lastPointsEvaluationDate
+      ? new Date(this.profile.lastPointsEvaluationDate)
+      : new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    let points = typeof this.profile.studyPoints === "number"
+      ? this.profile.studyPoints
+      : INITIAL_STUDY_POINTS;
+    const attendance = [...this.attendance];
+
+    for (
+      const date = new Date(lastEvaluation.getTime());
+      date < today;
+      date.setDate(date.getDate() + 1)
+    ) {
+      const dateKey = date.toISOString().slice(0, 10);
+      const dayOfWeek = (date.getDay() + 6) % 7;
+
+      this.schedule
+        .filter((item) => item.is_recurring && item.dayOfWeek === dayOfWeek)
+        .forEach((item) => {
+          const alreadyRecorded = attendance.some(
+            (record) => record.scheduleId === item.id && record.date === dateKey,
+          );
+
+          if (!alreadyRecorded) {
+            const absentRecord: AttendanceRecord = {
+              id: `absence-${item.id}-${dateKey}`,
+              scheduleId: item.id,
+              date: dateKey,
+              status: "absent",
+            };
+            attendance.push(absentRecord);
+            points -= MISSED_SESSION_DEDUCTION;
+          }
+        });
+    }
+
+    const nextProfile = {
+      ...this.profile,
+      studyPoints: clampStudyPoints(points),
+      studyTier: getStudyTier(points).name,
+      lastPointsEvaluationDate: today.toISOString(),
+      lowPointsAlertSent:
+        this.profile.lowPointsAlertSent || points <= LOW_POINTS_THRESHOLD,
+      accountDeletionWarning:
+        this.profile.accountDeletionWarning || points <= 0,
+    };
+
+    this.attendance = attendance;
+    this.profile = nextProfile;
+    void this.saveToStorage("attendance", this.attendance);
+    void this.saveToStorage("profile", this.profile);
+    return nextProfile;
   }
 
   // ============================================================

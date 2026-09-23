@@ -100,6 +100,16 @@ export const StoreProvider: React.FC<{
           return;
         }
 
+        const loadedProfile = store.getProfile();
+        const initializedProfile = loadedProfile
+          ? store.initializeStudyPoints(loadedProfile)
+          : null;
+
+        if (initializedProfile) {
+          store.setProfile(initializedProfile);
+        }
+        store.evaluateMissedSessions();
+
         setModules(store.getModules());
         setAssessments(store.getAssessments());
         setFiles(store.getFiles());
@@ -246,9 +256,10 @@ export const StoreProvider: React.FC<{
    */
 
   const setProfile = (newProfile: UserProfile) => {
-    store.setProfile(newProfile);
+    const initializedProfile = store.initializeStudyPoints(newProfile);
+    store.setProfile(initializedProfile);
 
-    setProfileState(newProfile);
+    setProfileState(initializedProfile);
   };
 
   /*

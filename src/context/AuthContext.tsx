@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Platform } from 'react-native';
 import { API_URL as CONFIG_API_URL } from "../config/api";
+import { INITIAL_STUDY_POINTS, getStudyTier } from "../utils/studyPoints";
 
 const LOCAL_API_URL = Platform.OS === 'android'
   ? 'http://localhost:5000/api'
@@ -413,6 +414,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         studyDaysPerWeek: profileData.studyDaysPerWeek ?? '',
         preferredStudyTime: profileData.productiveTime,
         studyChallenges: profileData.studyChallenges || [],
+        studyPoints: INITIAL_STUDY_POINTS,
+        studyTier: getStudyTier(INITIAL_STUDY_POINTS).name,
+        pointsInitialized: true,
+        lowPointsAlertSent: false,
+        accountDeletionWarning: false,
       };
       
       let token = await AsyncStorage.getItem('authToken');
@@ -459,6 +465,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
       await AsyncStorage.setItem('onboardingCompleted', 'true');
       await AsyncStorage.setItem('onboardingProfile', JSON.stringify(savedProfile));
+      await AsyncStorage.setItem('profile', JSON.stringify(savedProfile));
       setUser(updatedUser);
 
       return data;
@@ -483,6 +490,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         await AsyncStorage.setItem('userData', JSON.stringify(fallbackUser));
         await AsyncStorage.setItem('onboardingCompleted', 'true');
         await AsyncStorage.setItem('onboardingProfile', JSON.stringify(fallbackUser.profile));
+        await AsyncStorage.setItem('profile', JSON.stringify(fallbackUser.profile));
         setUser(fallbackUser);
       }
       return { success: true, profile: {
