@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import React from "react";
+import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { RootStackParamList } from "./types";
 
 // Auth Screens
 import { LoginScreen } from "../screens/LoginScreen";
@@ -19,10 +20,18 @@ import { ProfileScreen } from "../screens/ProfileScreen";
 import { QuizScreen } from "../screens/QuizScreen";
 import { ScheduleScreen } from "../screens/ScheduleScreen";
 
-const Stack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function AppNavigator() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator color="#6366f1" />
+      </View>
+    );
+  }
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>

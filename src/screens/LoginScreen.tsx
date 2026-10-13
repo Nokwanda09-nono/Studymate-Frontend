@@ -3,17 +3,17 @@ import { NavigationProp, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from 'react-native';
 import { CustomButton } from '../components/CustomButton';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +27,7 @@ type RootStackParamList = {
 
 export function LoginScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
-  const { login, resendVerification, forgotPassword, user, loading: authLoading } = useAuth();
+  const { login, resendVerification, forgotPassword } = useAuth();
   const { width, height } = useWindowDimensions();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,43 +39,56 @@ export function LoginScreen() {
   const isSmallDevice = width < 360 || height < 700;
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail || !password) {
+      Alert.alert('Login details required', 'Enter both your email address and password.');
       return;
     }
 
     setLoading(true);
     try {
-      await login(email, password);
+      await login(normalizedEmail, password);
       
       // After successful login, the useEffect will handle navigation
       // based on onboarding status
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to log in right now.';
+      const requiresVerification =
+        typeof error === 'object' &&
+        error !== null &&
+        'requiresVerification' in error &&
+        error.requiresVerification === true;
+
       // Check if the error is due to unverified email
-      if (error.requiresVerification || error.message?.includes('verify your email')) {
+      if (requiresVerification || /verify your email/i.test(message)) {
         Alert.alert(
           'Email Not Verified',
-          'Please verify your email before logging in. Would you like to resend the verification email?',
+          'Please verify your email before logging in. Open the verification screen to enter your code or resend it.',
           [
+            {
+              text: 'Verify Now',
+              onPress: () => navigation.navigate('VerifyEmail', { email: normalizedEmail }),
+            },
+            {
+              text: 'Resend & Verify',
+              onPress: () => handleResendVerification(true),
+            },
             {
               text: 'Cancel',
               style: 'cancel',
             },
-            {
-              text: 'Resend Email',
-              onPress: () => handleResendVerification(),
-            },
           ]
         );
       } else {
-        Alert.alert('Login Failed', error.message || 'Invalid email or password');
+        Alert.alert('Login Failed', message);
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleResendVerification = async () => {
+  const handleResendVerification = async (openVerification = false) => {
     if (!email) {
       Alert.alert('Error', 'Please enter your email address first');
       return;
@@ -91,7 +104,11 @@ export function LoginScreen() {
         [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('VerifyEmail', { email }),
+            onPress: () => {
+              if (openVerification) {
+                navigation.navigate('VerifyEmail', { email: email.trim() });
+              }
+            },
           },
         ]
       );
@@ -221,7 +238,7 @@ export function LoginScreen() {
               </View>
 
               <View style={[styles.registerContainer, isSmallDevice && styles.registerContainerSmall]}>
-                <Text style={[styles.registerText, isSmallDevice && styles.registerTextSmall]}>Don't have an account? </Text>
+                <Text style={[styles.registerText, isSmallDevice && styles.registerTextSmall]}>Don&apos;t have an account? </Text>
                 <TouchableOpacity 
                   onPress={() => navigation.navigate('Register')}
                   disabled={loading}

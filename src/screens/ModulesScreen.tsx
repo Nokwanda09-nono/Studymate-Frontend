@@ -3,16 +3,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
-    Alert,
-    FlatList,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -22,7 +22,8 @@ import { BottomNav } from "../components/ButtomNav";
 import { CustomButton } from "../components/CustomButton";
 import { CustomCard } from "../components/CustomCard";
 import { useStore } from "../context/StoreContext";
-import { persistPickedFile } from "../lib/fileStorage";
+import { uploadFileToDatabase } from "../lib/fileApi";
+import { deletePersistedFile, persistPickedFile } from "../lib/fileStorage";
 import { Module } from "../lib/store";
 
 // ---------------------------------------------------------
@@ -92,6 +93,7 @@ export function ModulesScreen() {
     modules,
     addModule,
     addFile,
+    setFileRemoteId,
   } = useStore();
 
   const [modalVisible, setModalVisible] =
@@ -201,13 +203,16 @@ export function ModulesScreen() {
       }
 
       let uploadedCount = 0;
+      let pendingSyncCount = 0;
 
       for (const file of selectedFiles) {
+        let permanentUri = "";
+        let savedLocally = false;
         try {
           // Copy the picked file into permanent app storage
           // so the URI doesn't get wiped when the OS clears
           // the cache directory.
-          const permanentUri =
+          permanentUri =
             await persistPickedFile({
               uri: file.uri,
               name:
@@ -248,9 +253,31 @@ export function ModulesScreen() {
           };
 
           addFile(newFile);
+          savedLocally = true;
+
+          try {
+            const remoteFile = await uploadFileToDatabase({
+              moduleId,
+              moduleName: modules.find((item) => item.id === moduleId)?.name,
+              uri: permanentUri,
+              name: newFile.name,
+              type: newFile.type,
+              size: newFile.size,
+            });
+            await setFileRemoteId(newFile.id, remoteFile.remoteId);
+          } catch (syncError) {
+            pendingSyncCount++;
+            console.warn(
+              `File "${newFile.name}" was saved locally but could not sync:`,
+              syncError,
+            );
+          }
 
           uploadedCount++;
         } catch (fileError) {
+          if (permanentUri && !savedLocally) {
+            await deletePersistedFile(permanentUri);
+          }
           console.error(
             `Error adding file "${file.name}":`,
             fileError
@@ -262,12 +289,10 @@ export function ModulesScreen() {
 
       if (uploadedCount > 0) {
         Alert.alert(
-          "Upload successful",
-          `${uploadedCount} file${
-            uploadedCount === 1
-              ? ""
-              : "s"
-          } added to the module.`
+          pendingSyncCount > 0 ? "Files added on this device" : "Upload successful",
+          pendingSyncCount > 0
+            ? `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} added to the module. They will sync when the server is available.`
+            : `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} added to the module.`
         );
       } else {
         Alert.alert(

@@ -2,19 +2,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useState } from "react";
 import {
-  Alert,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../components/ButtomNav";
 import { CustomCard } from "../components/CustomCard";
 import { useStore } from "../context/StoreContext";
+import { generateModuleQuiz } from "../lib/quizApi";
 import { Assessment } from "../lib/store";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -52,7 +53,7 @@ export function ScheduleScreen() {
   const [newTimetableItem, setNewTimetableItem] = useState({
     title: "",
     moduleId: "",
-    dayOfWeek: 0,
+    selectedDays: [0],
     startTime: "08:00",
     endTime: "10:00",
     color: COLORS[0],
@@ -64,6 +65,7 @@ export function ScheduleScreen() {
   const [selectedType, setSelectedType] = useState<
     "quiz" | "test" | "mock_exam"
   >("quiz");
+  const [generatingAssessment, setGeneratingAssessment] = useState(false);
 
   // Calculate study performance
   const getStudyPerformance = () => {
@@ -104,24 +106,38 @@ export function ScheduleScreen() {
   };
 
   const handleAddSchedule = () => {
-    if (!newTimetableItem.title || !newTimetableItem.moduleId) {
-      Alert.alert("Error", "Please fill in all required fields");
+    if (!newTimetableItem.title || !newTimetableItem.moduleId || newTimetableItem.selectedDays.length === 0) {
+      Alert.alert("Error", "Please select a module and at least one study day");
       return;
     }
 
     const module = modules.find((m) => m.id === newTimetableItem.moduleId);
-    const scheduleItem = {
-      id: editingItem?.id || Date.now().toString(),
-      ...newTimetableItem,
-      color: module?.color || COLORS[0],
-      is_recurring: true,
-    };
 
     if (editingItem) {
       deleteScheduleItem(editingItem.id);
-      addScheduleItem(scheduleItem);
+      addScheduleItem({
+        id: editingItem.id,
+        title: newTimetableItem.title,
+        moduleId: newTimetableItem.moduleId,
+        dayOfWeek: newTimetableItem.selectedDays[0],
+        startTime: newTimetableItem.startTime,
+        endTime: newTimetableItem.endTime,
+        color: module?.color || COLORS[0],
+        is_recurring: true,
+      });
     } else {
-      addScheduleItem(scheduleItem);
+      newTimetableItem.selectedDays.forEach((dayOfWeek, index) => {
+        addScheduleItem({
+          id: `${Date.now()}-${dayOfWeek}-${index}`,
+          title: newTimetableItem.title,
+          moduleId: newTimetableItem.moduleId,
+          dayOfWeek,
+          startTime: newTimetableItem.startTime,
+          endTime: newTimetableItem.endTime,
+          color: module?.color || COLORS[0],
+          is_recurring: true,
+        });
+      });
     }
 
     setTimetableModalVisible(false);
@@ -129,7 +145,7 @@ export function ScheduleScreen() {
     setNewTimetableItem({
       title: "",
       moduleId: "",
-      dayOfWeek: 0,
+        selectedDays: [0],
       startTime: "08:00",
       endTime: "10:00",
       color: COLORS[0],
@@ -141,7 +157,7 @@ export function ScheduleScreen() {
     setNewTimetableItem({
       title: item.title,
       moduleId: item.moduleId,
-      dayOfWeek: item.dayOfWeek,
+      selectedDays: [item.dayOfWeek],
       startTime: item.startTime,
       endTime: item.endTime,
       color: item.color,
@@ -166,7 +182,7 @@ export function ScheduleScreen() {
     return daySchedule.find((s) => s.startTime === timeSlot);
   };
 
-  const handleGenerateAssessment = () => {
+  const handleGenerateAssessment = async () => {
     if (!selectedModule) {
       Alert.alert("Error", "Please select a module");
       return;
@@ -181,19 +197,28 @@ export function ScheduleScreen() {
       mock_exam: 50,
     };
 
-    const assessmentItem: Assessment = {
-      id: Date.now().toString(),
-      moduleId: selectedModule,
-      type: selectedType,
-      title: `${module.name} ${selectedType.replace("_", " ").toUpperCase()}`,
-      questionCount: questionCounts[selectedType],
-      completed: false,
-      score: 0,
-    };
+    setGeneratingAssessment(true);
+    try {
+      const questions = await generateModuleQuiz(selectedModule, module.name, questionCounts[selectedType]);
+      const assessmentItem: Assessment = {
+        id: Date.now().toString(),
+        moduleId: selectedModule,
+        type: selectedType,
+        title: `${module.name} ${selectedType.replace("_", " ").toUpperCase()}`,
+        questionCount: questions.length,
+        completed: false,
+        score: 0,
+        questions,
+      };
 
-    addAssessment(assessmentItem);
-    setAssessmentModalVisible(false);
-    Alert.alert("Success", "Assessment generated successfully!");
+      addAssessment(assessmentItem);
+      setAssessmentModalVisible(false);
+      Alert.alert("Success", "Quiz generated from your uploaded module content.");
+    } catch (error) {
+      Alert.alert("Quiz generation failed", error instanceof Error ? error.message : "Please upload readable study content first.");
+    } finally {
+      setGeneratingAssessment(false);
+    }
   };
 
   const renderTimetable = () => (
@@ -227,7 +252,7 @@ export function ScheduleScreen() {
           setNewTimetableItem({
             title: "",
             moduleId: "",
-            dayOfWeek: 0,
+            selectedDays: [0],
             startTime: "08:00",
             endTime: "10:00",
             color: COLORS[0],
@@ -551,32 +576,36 @@ export function ScheduleScreen() {
                 </View>
               )}
 
-              <Text style={styles.modalLabel}>Day of Week</Text>
+              <Text style={styles.modalLabel}>Study Days</Text>
+              <Text style={styles.dayHelperText}>Select every day you want to study this module.</Text>
               <View style={styles.dayList}>
                 {DAYS.map((day, index) => (
                   <TouchableOpacity
                     key={day}
                     style={[
                       styles.dayOption,
-                      newTimetableItem.dayOfWeek === index &&
+                      newTimetableItem.selectedDays.includes(index) &&
                       styles.dayOptionSelected,
                     ]}
-                    onPress={() =>
-                      setNewTimetableItem({
-                        ...newTimetableItem,
-                        dayOfWeek: index,
-                      })
-                    }
+                    onPress={() => {
+                      const selectedDays = newTimetableItem.selectedDays.includes(index)
+                        ? newTimetableItem.selectedDays.filter((dayIndex) => dayIndex !== index)
+                        : [...newTimetableItem.selectedDays, index].sort((first, second) => first - second);
+                      setNewTimetableItem({ ...newTimetableItem, selectedDays });
+                    }}
                   >
                     <Text
                       style={[
                         styles.dayOptionText,
-                        newTimetableItem.dayOfWeek === index &&
+                        newTimetableItem.selectedDays.includes(index) &&
                         styles.dayOptionTextSelected,
                       ]}
                     >
                       {day}
                     </Text>
+                    {newTimetableItem.selectedDays.includes(index) && (
+                      <Ionicons name="checkmark-circle" size={16} color="#166534" />
+                    )}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -615,10 +644,10 @@ export function ScheduleScreen() {
               <TouchableOpacity
                 style={[
                   styles.saveButton,
-                  !newTimetableItem.moduleId && styles.saveButtonDisabled,
+                  (!newTimetableItem.moduleId || newTimetableItem.selectedDays.length === 0) && styles.saveButtonDisabled,
                 ]}
                 onPress={handleAddSchedule}
-                disabled={!newTimetableItem.moduleId}
+                disabled={!newTimetableItem.moduleId || newTimetableItem.selectedDays.length === 0}
               >
                 <Text style={styles.saveButtonText}>
                   {editingItem ? "Update" : "Add to Schedule"}
@@ -703,12 +732,14 @@ export function ScheduleScreen() {
               <TouchableOpacity
                 style={[
                   styles.saveButton,
-                  !selectedModule && styles.saveButtonDisabled,
+                  (!selectedModule || generatingAssessment) && styles.saveButtonDisabled,
                 ]}
                 onPress={handleGenerateAssessment}
-                disabled={!selectedModule}
+                  disabled={!selectedModule || generatingAssessment}
               >
-                <Text style={styles.saveButtonText}>Generate Assessment</Text>
+                <Text style={styles.saveButtonText}>
+                  {generatingAssessment ? "Reading module files..." : "Generate Assessment"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1139,7 +1170,16 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
+  dayHelperText: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: -8,
+    marginBottom: 10,
+  },
   dayOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderWidth: 1,

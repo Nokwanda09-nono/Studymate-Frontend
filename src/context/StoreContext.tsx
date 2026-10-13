@@ -17,6 +17,12 @@ import {
     User,
     UserProfile,
 } from "../lib/store";
+import {
+    deleteFileFromDatabase,
+    fetchUserFiles,
+    uploadFileToDatabase,
+} from "../lib/fileApi";
+import { useAuth } from "./AuthContext";
 
 interface StoreContextType {
   modules: Module[];
@@ -38,6 +44,9 @@ interface StoreContextType {
 
   addFile: (file: FileItem) => void;
   deleteFile: (id: string) => void;
+  setFileRemoteId: (fileId: string, remoteId: string) => Promise<void>;
+  queueRemoteFileDeletion: (remoteId: string) => Promise<void>;
+  clearQueuedRemoteFileDeletion: (remoteId: string) => Promise<void>;
 
   addScheduleItem: (item: ScheduleItem) => void;
   deleteScheduleItem: (id: string) => void;
@@ -57,6 +66,7 @@ const StoreContext = createContext<
 export const StoreProvider: React.FC<{
   children: React.ReactNode;
 }> = ({ children }) => {
+  const { user: authUser } = useAuth();
   const [modules, setModules] = useState<Module[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
@@ -88,7 +98,18 @@ export const StoreProvider: React.FC<{
 
     const loadData = async () => {
       try {
-        await store.waitForInitialization();
+        if (!authUser?.id) {
+          setModules([]);
+          setAssessments([]);
+          setFiles([]);
+          setSchedule([]);
+          setAttendance([]);
+          setUserState(null);
+          setProfileState(null);
+          return;
+        }
+
+        await store.loadForUser(authUser.id);
 
         /*
          * The component may have been unmounted while the
@@ -109,6 +130,93 @@ export const StoreProvider: React.FC<{
           store.setProfile(initializedProfile);
         }
         store.evaluateMissedSessions();
+
+        try {
+          for (const remoteId of store.getPendingRemoteFileDeletions()) {
+            try {
+              await deleteFileFromDatabase(remoteId);
+              await store.removePendingRemoteFileDeletion(remoteId);
+            } catch (deleteError) {
+              console.warn(
+                "Could not finish deleting a remote file:",
+                deleteError,
+              );
+            }
+          }
+
+          const remoteFiles = await fetchUserFiles();
+          const modulesById = new Map(
+            store.getModules().map((module) => [module.id, module]),
+          );
+          const moduleNames = new Set(
+            store.getModules().map((module) => module.name),
+          );
+
+          remoteFiles.forEach((file, index) => {
+            const name = file.moduleName || `Module ${index + 1}`;
+            if (modulesById.has(file.moduleId) || moduleNames.has(name)) {
+              return;
+            }
+
+            const module = {
+              id: file.moduleId,
+              name,
+              color: ["#3b82f6", "#22c55e", "#f59e0b", "#8b5cf6"][index % 4],
+              icon: "book",
+              fileCount: 0,
+            };
+            modulesById.set(module.id, module);
+            moduleNames.add(module.name);
+            store.addModule(module);
+          });
+
+          for (const file of store.getFiles()) {
+            if (file.remoteId || !file.uri) {
+              continue;
+            }
+            try {
+              const uploadedFile = await uploadFileToDatabase({
+                moduleId: file.moduleId,
+                moduleName: store.getModules().find(
+                  (module) => module.id === file.moduleId,
+                )?.name,
+                uri: file.uri,
+                name: file.name,
+                type: file.type,
+                size: file.size,
+              });
+              await store.setFileRemoteId(file.id, uploadedFile.remoteId);
+            } catch (uploadError) {
+              console.warn(
+                `Could not sync local file "${file.name}" to the database:`,
+                uploadError,
+              );
+            }
+          }
+
+          const moduleByName = new Map(store.getModules().map((module) => [module.name, module]));
+          store.mergeRemoteFiles(
+            remoteFiles
+              .filter(
+                (file) =>
+                  !store.getPendingRemoteFileDeletions().includes(
+                    file.remoteId || file.id,
+                  ),
+              )
+              .map((file) => ({
+                ...file,
+                id: file.id,
+                remoteId: file.remoteId || file.id,
+                uri: file.uri || file.url || "",
+                uploadedAt:
+                  file.uploadedAt || file.createdAt || new Date().toISOString(),
+                moduleId:
+                  moduleByName.get(file.moduleName || "")?.id || file.moduleId,
+              })),
+          );
+        } catch (syncError) {
+          console.warn("Could not sync database files on login:", syncError);
+        }
 
         setModules(store.getModules());
         setAssessments(store.getAssessments());
@@ -131,7 +239,7 @@ export const StoreProvider: React.FC<{
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authUser?.id]);
 
   /*
    * ----------------------------------------------------------
@@ -207,6 +315,19 @@ export const StoreProvider: React.FC<{
     setModules(store.getModules());
   };
 
+  const setFileRemoteId = async (fileId: string, remoteId: string) => {
+    await store.setFileRemoteId(fileId, remoteId);
+    setFiles(store.getFiles());
+  };
+
+  const queueRemoteFileDeletion = (remoteId: string) => {
+    return store.addPendingRemoteFileDeletion(remoteId);
+  };
+
+  const clearQueuedRemoteFileDeletion = (remoteId: string) => {
+    return store.removePendingRemoteFileDeletion(remoteId);
+  };
+
   /*
    * ----------------------------------------------------------
    * SCHEDULE
@@ -235,6 +356,7 @@ export const StoreProvider: React.FC<{
     store.addAttendance(record);
 
     setAttendance(store.getAttendance());
+    setProfileState(store.getProfile());
   };
 
   /*
@@ -313,6 +435,9 @@ export const StoreProvider: React.FC<{
 
         addFile,
         deleteFile,
+        setFileRemoteId,
+        queueRemoteFileDeletion,
+        clearQueuedRemoteFileDeletion,
 
         addScheduleItem,
         deleteScheduleItem,

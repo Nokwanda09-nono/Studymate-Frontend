@@ -58,7 +58,8 @@ export const seedDemoData = () => {
       name: "Introduction to Programming.pdf",
       type: "application/pdf",
       size: 2457600,
-      uploadedAt: new Date(),
+      uri: "",
+      uploadedAt: new Date().toISOString(),
     },
     {
       id: "file-2",
@@ -66,7 +67,8 @@ export const seedDemoData = () => {
       name: "Data Structures Notes.pdf",
       type: "application/pdf",
       size: 1835008,
-      uploadedAt: new Date(),
+      uri: "",
+      uploadedAt: new Date().toISOString(),
     },
     {
       id: "file-3",
@@ -74,7 +76,8 @@ export const seedDemoData = () => {
       name: "Calculus Review.pdf",
       type: "application/pdf",
       size: 3145728,
-      uploadedAt: new Date(),
+      uri: "",
+      uploadedAt: new Date().toISOString(),
     },
   ];
 

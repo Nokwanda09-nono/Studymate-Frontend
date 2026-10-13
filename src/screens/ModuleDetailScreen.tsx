@@ -1,19 +1,21 @@
 // src/screens/ModuleDetailScreen.tsx
 import { Ionicons } from "@expo/vector-icons";
+import type { RouteProp } from "@react-navigation/native";
 import {
-    useNavigation,
-    useRoute,
+  useNavigation,
+  useRoute,
 } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
-    Alert,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -21,9 +23,14 @@ import { CustomButton } from "../components/CustomButton";
 import { CustomCard } from "../components/CustomCard";
 import { useStore } from "../context/StoreContext";
 import {
-    deletePersistedFile,
-    persistPickedFile,
+  deleteFileFromDatabase,
+  uploadFileToDatabase,
+} from "../lib/fileApi";
+import {
+  deletePersistedFile,
+  persistPickedFile,
 } from "../lib/fileStorage";
+import type { RootStackParamList } from "../navigation/types";
 
 // ---------------------------------------------------------
 // Supported document types
@@ -56,18 +63,19 @@ const DOCUMENT_TYPES = [
 // ---------------------------------------------------------
 
 export function ModuleDetailScreen() {
-  const navigation = useNavigation<any>();
-  const route = useRoute();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, "ModuleDetail">>();
 
-  const { id } = route.params as {
-    id: string;
-  };
+  const { id } = route.params;
 
   const {
     modules,
     files,
     addFile,
     deleteFile,
+    setFileRemoteId,
+    queueRemoteFileDeletion,
+    clearQueuedRemoteFileDeletion,
   } = useStore();
 
   const [refreshing, setRefreshing] =
@@ -181,13 +189,16 @@ export function ModuleDetailScreen() {
         }
 
         let uploadedCount = 0;
+        let pendingSyncCount = 0;
 
         for (const file of selectedFiles) {
+          let permanentUri = "";
+          let savedLocally = false;
           try {
             // Copy the picked file into permanent app storage
             // so the URI doesn't get wiped when the OS clears
             // the cache directory.
-            const permanentUri =
+            permanentUri =
               await persistPickedFile({
                 uri: file.uri,
                 name:
@@ -228,9 +239,30 @@ export function ModuleDetailScreen() {
             };
 
             addFile(fileItem);
+            savedLocally = true;
 
+            try {
+              const remoteFile = await uploadFileToDatabase({
+                moduleId: module.id,
+                moduleName: module.name,
+                uri: permanentUri,
+                name: fileItem.name,
+                type: fileItem.type,
+                size: fileItem.size,
+              });
+              await setFileRemoteId(fileItem.id, remoteFile.remoteId);
+            } catch (syncError) {
+              pendingSyncCount++;
+              console.warn(
+                `File "${fileItem.name}" was saved locally but could not sync:`,
+                syncError,
+              );
+            }
             uploadedCount++;
           } catch (fileError) {
+            if (permanentUri && !savedLocally) {
+              await deletePersistedFile(permanentUri);
+            }
             console.error(
               `Failed to add file ${file.name}:`,
               fileError
@@ -242,12 +274,10 @@ export function ModuleDetailScreen() {
 
         if (uploadedCount > 0) {
           Alert.alert(
-            "Files uploaded",
-            `${uploadedCount} file${
-              uploadedCount === 1
-                ? ""
-                : "s"
-            } successfully added to ${module.name}.`
+            pendingSyncCount > 0 ? "Files added on this device" : "Files uploaded",
+            pendingSyncCount > 0
+              ? `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} added to ${module.name}. They will sync when the server is available.`
+              : `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} successfully added to ${module.name}.`
           );
         } else {
           Alert.alert(
@@ -296,16 +326,36 @@ export function ModuleDetailScreen() {
               const target = files.find(
                 (f) => f.id === fileId
               );
+              let remoteDeletePending = false;
 
-              // Remove the physical file first.
-              if (target?.uri) {
-                await deletePersistedFile(
-                  target.uri
-                );
+              if (target?.remoteId) {
+                await queueRemoteFileDeletion(target.remoteId);
               }
 
-              // Then remove the metadata from the store.
+              if (target?.uri) {
+                await deletePersistedFile(target.uri);
+              }
               deleteFile(fileId);
+
+              if (target?.remoteId) {
+                try {
+                  await deleteFileFromDatabase(target.remoteId);
+                  await clearQueuedRemoteFileDeletion(target.remoteId);
+                } catch (remoteDeleteError) {
+                  remoteDeletePending = true;
+                  console.warn(
+                    `Could not delete remote file "${fileName}":`,
+                    remoteDeleteError,
+                  );
+                }
+              }
+
+              if (remoteDeletePending) {
+                Alert.alert(
+                  "Deleted on this device",
+                  "The file was deleted locally. Its server copy will be removed when the connection is available.",
+                );
+              }
             } catch (error) {
               console.error(
                 "Delete file error:",
@@ -518,10 +568,17 @@ export function ModuleDetailScreen() {
 
   const handleFilePress = (file: {
     id: string;
+    name?: string;
+    type?: string;
   }) => {
-    navigation.navigate("FileViewer", {
-      id: file.id,
-    });
+    const isPdf = (file.type || "").toLowerCase().includes("pdf") ||
+      file.name?.toLowerCase().endsWith(".pdf");
+
+    if (isPdf) {
+      navigation.navigate("PDFViewer", { fileId: file.id });
+    } else {
+      navigation.navigate("FileViewer", { id: file.id });
+    }
   };
 
   // -------------------------------------------------------

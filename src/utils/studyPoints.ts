@@ -1,5 +1,7 @@
 export const INITIAL_STUDY_POINTS = 1000;
-export const MISSED_SESSION_DEDUCTION = 25;
+export const MAX_STUDY_POINTS = 1000;
+export const MISSED_SESSION_DEDUCTION = 50;
+export const ATTENDED_SESSION_RECOVERY = 25;
 export const LOW_POINTS_THRESHOLD = 100;
 export const ACCOUNT_DELETION_THRESHOLD = 0;
 
@@ -47,5 +49,8 @@ export const getStudyTier = (points: number): StudyTierDetails => {
 };
 
 export const clampStudyPoints = (points: number): number => {
-  return Math.max(ACCOUNT_DELETION_THRESHOLD, Math.round(points));
+  return Math.min(
+    MAX_STUDY_POINTS,
+    Math.max(ACCOUNT_DELETION_THRESHOLD, Math.round(points)),
+  );
 };

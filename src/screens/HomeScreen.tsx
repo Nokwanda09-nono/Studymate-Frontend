@@ -13,14 +13,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../components/ButtomNav";
 import { CustomCard } from "../components/CustomCard";
+import { ProfileAvatar } from "../components/ProfileAvatar";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
-import React from "react";
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { modules, schedule, assessments } = useStore();
+  const { modules, schedule, assessments, profile } = useStore();
+  const selectedAvatarId =
+    user?.profile?.selectedAvatar ?? profile?.selectedAvatar;
 
   const getUsername = () => {
     if (user?.firstName) {
@@ -92,7 +94,11 @@ export function HomeScreen() {
               </Text>
             </View>
             <View style={styles.avatarContainer}>
-              <Ionicons name="person-circle" size={54} color="white" />
+              <ProfileAvatar
+                avatarId={selectedAvatarId}
+                size={54}
+                iconColor="#1f2937"
+              />
             </View>
           </View>
         </LinearGradient>

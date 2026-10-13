@@ -2,6 +2,7 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
+    ATTENDED_SESSION_RECOVERY,
     INITIAL_STUDY_POINTS,
     LOW_POINTS_THRESHOLD,
     MISSED_SESSION_DEDUCTION,
@@ -47,6 +48,7 @@ export interface Module {
 
 export interface FileItem {
   id: string;
+  remoteId?: string;
   moduleId: string;
   name: string;
   type: string;
@@ -74,6 +76,14 @@ export interface Assessment {
   questionCount: number;
   completed: boolean;
   score?: number;
+  questions?: QuizQuestion[];
+}
+
+export interface QuizQuestion {
+  id: number;
+  question: string;
+  options: string[];
+  correctAnswer: number;
 }
 
 export interface ScheduleItem {
@@ -92,6 +102,7 @@ export interface AttendanceRecord {
   scheduleId: string;
   date: string;
   status: "present" | "absent";
+  pointsProcessed?: boolean;
 }
 
 class Store {
@@ -102,6 +113,8 @@ class Store {
   private attendance: AttendanceRecord[] = [];
   private user: User | null = null;
   private profile: UserProfile | null = null;
+  private activeUserId: string | null = null;
+  private pendingRemoteFileDeletions: string[] = [];
 
   /**
    * Indicates whether AsyncStorage has finished loading.
@@ -116,7 +129,24 @@ class Store {
   private initializationPromise: Promise<void>;
 
   constructor() {
-    this.initializationPromise = this.loadFromStorage();
+    this.initializationPromise = Promise.resolve();
+  }
+
+  private storageKey(key: string): string {
+    return this.activeUserId ? `user:${this.activeUserId}:${key}` : key;
+  }
+
+  async loadForUser(userId: string): Promise<void> {
+    this.activeUserId = userId;
+    this.modules = [];
+    this.files = [];
+    this.assessments = [];
+    this.schedule = [];
+    this.attendance = [];
+    this.user = null;
+    this.profile = null;
+    this.pendingRemoteFileDeletions = [];
+    await this.loadFromStorage(userId);
   }
 
   /**
@@ -127,7 +157,7 @@ class Store {
     await this.initializationPromise;
   }
 
-  private async loadFromStorage(): Promise<void> {
+  private async loadFromStorage(userId?: string): Promise<void> {
     try {
       const [
         modules,
@@ -137,18 +167,31 @@ class Store {
         attendance,
         user,
         profile,
+        pendingRemoteFileDeletions,
       ] = await Promise.all([
-        AsyncStorage.getItem("modules"),
-        AsyncStorage.getItem("files"),
-        AsyncStorage.getItem("assessments"),
-        AsyncStorage.getItem("schedule"),
-        AsyncStorage.getItem("attendance"),
-        AsyncStorage.getItem("user"),
-        AsyncStorage.getItem("profile"),
+        AsyncStorage.getItem(this.storageKey("modules")),
+        AsyncStorage.getItem(this.storageKey("files")),
+        AsyncStorage.getItem(this.storageKey("assessments")),
+        AsyncStorage.getItem(this.storageKey("schedule")),
+        AsyncStorage.getItem(this.storageKey("attendance")),
+        AsyncStorage.getItem(this.storageKey("user")),
+        AsyncStorage.getItem(this.storageKey("profile")),
+        AsyncStorage.getItem(this.storageKey("pendingRemoteFileDeletions")),
       ]);
 
       if (modules) {
-        this.modules = JSON.parse(modules);
+        const loadedModules: Module[] = JSON.parse(modules);
+        const moduleIds = new Set<string>();
+        this.modules = loadedModules.filter((module) => {
+          if (moduleIds.has(module.id)) {
+            return false;
+          }
+          moduleIds.add(module.id);
+          return true;
+        });
+        if (this.modules.length !== loadedModules.length) {
+          void this.saveToStorage("modules", this.modules);
+        }
       }
 
       if (files) {
@@ -180,7 +223,12 @@ class Store {
       }
 
       if (attendance) {
-        this.attendance = JSON.parse(attendance);
+        this.attendance = JSON.parse(attendance).map((record: AttendanceRecord) => ({
+          ...record,
+          // Older absence records already had the previous deduction applied.
+          pointsProcessed:
+            record.pointsProcessed ?? record.status === "absent",
+        }));
       }
 
       if (user) {
@@ -189,6 +237,10 @@ class Store {
 
       if (profile) {
         this.profile = JSON.parse(profile);
+      }
+
+      if (pendingRemoteFileDeletions) {
+        this.pendingRemoteFileDeletions = JSON.parse(pendingRemoteFileDeletions);
       }
 
       /**
@@ -219,7 +271,7 @@ class Store {
     data: unknown,
   ): Promise<void> {
     try {
-      await AsyncStorage.setItem(key, JSON.stringify(data));
+      await AsyncStorage.setItem(this.storageKey(key), JSON.stringify(data));
     } catch (error) {
       console.error(`Error saving ${key}:`, error);
     }
@@ -263,6 +315,75 @@ class Store {
 
   getFiles(): FileItem[] {
     return [...this.files];
+  }
+
+  getPendingRemoteFileDeletions(): string[] {
+    return [...this.pendingRemoteFileDeletions];
+  }
+
+  async addPendingRemoteFileDeletion(remoteId: string): Promise<void> {
+    if (this.pendingRemoteFileDeletions.includes(remoteId)) {
+      return;
+    }
+    this.pendingRemoteFileDeletions = [
+      ...this.pendingRemoteFileDeletions,
+      remoteId,
+    ];
+    await this.saveToStorage(
+      "pendingRemoteFileDeletions",
+      this.pendingRemoteFileDeletions,
+    );
+  }
+
+  async removePendingRemoteFileDeletion(remoteId: string): Promise<void> {
+    this.pendingRemoteFileDeletions =
+      this.pendingRemoteFileDeletions.filter((id) => id !== remoteId);
+    await this.saveToStorage(
+      "pendingRemoteFileDeletions",
+      this.pendingRemoteFileDeletions,
+    );
+  }
+
+  async setFileRemoteId(fileId: string, remoteId: string): Promise<void> {
+    const file = this.files.find((storedFile) => storedFile.id === fileId);
+    if (!file) {
+      return;
+    }
+    file.remoteId = remoteId;
+    await this.saveToStorage("files", this.files);
+  }
+
+  mergeRemoteFiles(remoteFiles: FileItem[]): void {
+    const filesByRemoteId = new Map(
+      this.files
+        .filter((file) => file.remoteId)
+        .map((file) => [file.remoteId as string, file]),
+    );
+    const filesById = new Map(
+      this.files.map((file) => [file.id, file]),
+    );
+
+    remoteFiles.forEach((remoteFile) => {
+      const existing = remoteFile.remoteId
+        ? filesByRemoteId.get(remoteFile.remoteId) ?? filesById.get(remoteFile.id)
+        : filesById.get(remoteFile.id);
+
+      if (existing) {
+        Object.assign(existing, remoteFile, { id: existing.id });
+        if (remoteFile.remoteId) {
+          filesByRemoteId.set(remoteFile.remoteId, existing);
+        }
+        return;
+      }
+
+      this.files.push(remoteFile);
+      filesById.set(remoteFile.id, remoteFile);
+      if (remoteFile.remoteId) {
+        filesByRemoteId.set(remoteFile.remoteId, remoteFile);
+      }
+    });
+
+    void this.saveToStorage("files", this.files);
   }
 
   addFile(file: FileItem): void {
@@ -412,10 +533,38 @@ class Store {
   }
 
   addAttendance(record: AttendanceRecord): void {
-    this.attendance = [
-      ...this.attendance,
-      record,
-    ];
+    const existingIndex = this.attendance.findIndex(
+      (storedRecord) =>
+        storedRecord.scheduleId === record.scheduleId &&
+        storedRecord.date === record.date,
+    );
+
+    if (existingIndex >= 0) {
+      const existingRecord = this.attendance[existingIndex];
+
+      if (existingRecord.status === "absent" && record.status === "present") {
+        this.attendance[existingIndex] = {
+          ...existingRecord,
+          ...record,
+          pointsProcessed: true,
+        };
+
+        if (this.profile) {
+          const points = clampStudyPoints(
+            (this.profile.studyPoints ?? INITIAL_STUDY_POINTS) +
+              ATTENDED_SESSION_RECOVERY,
+          );
+          this.profile = {
+            ...this.profile,
+            studyPoints: points,
+            studyTier: getStudyTier(points).name,
+          };
+          void this.saveToStorage("profile", this.profile);
+        }
+      }
+    } else {
+      this.attendance = [...this.attendance, record];
+    }
 
     void this.saveToStorage(
       "attendance",
@@ -427,6 +576,7 @@ class Store {
     if (typeof profile.studyPoints === "number") {
       return {
         ...profile,
+        studyPoints: clampStudyPoints(profile.studyPoints),
         studyTier: profile.studyTier || getStudyTier(profile.studyPoints).name,
         pointsInitialized: true,
       };
@@ -472,32 +622,41 @@ class Store {
       this.schedule
         .filter((item) => item.is_recurring && item.dayOfWeek === dayOfWeek)
         .forEach((item) => {
-          const alreadyRecorded = attendance.some(
+          const existingRecord = attendance.find(
             (record) => record.scheduleId === item.id && record.date === dateKey,
           );
 
-          if (!alreadyRecorded) {
+          if (!existingRecord) {
             const absentRecord: AttendanceRecord = {
               id: `absence-${item.id}-${dateKey}`,
               scheduleId: item.id,
               date: dateKey,
               status: "absent",
+              pointsProcessed: true,
             };
             attendance.push(absentRecord);
             points -= MISSED_SESSION_DEDUCTION;
+          } else if (!existingRecord.pointsProcessed) {
+            if (existingRecord.status === "present") {
+              points += ATTENDED_SESSION_RECOVERY;
+            } else {
+              points -= MISSED_SESSION_DEDUCTION;
+            }
+            existingRecord.pointsProcessed = true;
           }
         });
     }
 
+    const finalPoints = clampStudyPoints(points);
     const nextProfile = {
       ...this.profile,
-      studyPoints: clampStudyPoints(points),
-      studyTier: getStudyTier(points).name,
+      studyPoints: finalPoints,
+      studyTier: getStudyTier(finalPoints).name,
       lastPointsEvaluationDate: today.toISOString(),
       lowPointsAlertSent:
-        this.profile.lowPointsAlertSent || points <= LOW_POINTS_THRESHOLD,
+        this.profile.lowPointsAlertSent || finalPoints <= LOW_POINTS_THRESHOLD,
       accountDeletionWarning:
-        this.profile.accountDeletionWarning || points <= 0,
+        this.profile.accountDeletionWarning || finalPoints <= 0,
     };
 
     this.attendance = attendance;
@@ -553,9 +712,20 @@ class Store {
     this.attendance = [];
     this.user = null;
     this.profile = null;
+    this.pendingRemoteFileDeletions = [];
 
     try {
-      await AsyncStorage.clear();
+      const keys = [
+        "modules",
+        "files",
+        "assessments",
+        "schedule",
+        "attendance",
+        "user",
+        "profile",
+        "pendingRemoteFileDeletions",
+      ].map((key) => this.storageKey(key));
+      await AsyncStorage.multiRemove(keys);
     } catch (error) {
       console.error(
         "Error clearing AsyncStorage:",

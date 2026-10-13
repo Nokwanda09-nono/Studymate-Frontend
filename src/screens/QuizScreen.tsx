@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     Alert,
     ScrollView,
@@ -13,16 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CustomButton } from '../components/CustomButton';
 import { CustomCard } from '../components/CustomCard';
 import { useStore } from '../context/StoreContext';
+import { QuizQuestion } from '../lib/store';
 
-interface Question {
-  id: number;
-  question: string;
-  options: string[];
-  correctAnswer: number;
-}
-
-const generateMockQuestions = (count: number): Question[] => {
-  const questions: Question[] = [];
+const generateFallbackQuestions = (count: number): QuizQuestion[] => {
+  const questions: QuizQuestion[] = [];
   for (let i = 0; i < count; i++) {
     questions.push({
       id: i + 1,
@@ -46,7 +40,11 @@ export function QuizScreen() {
   const { assessments, schedule, attendance, updateAssessment, addAttendance } = useStore();
   
   const assessment = assessments.find(a => a.id === id);
-  const [questions] = useState(() => generateMockQuestions(assessment?.questionCount || 10));
+  const [questions] = useState<QuizQuestion[]>(
+    () => assessment?.questions?.length
+      ? assessment.questions
+      : generateFallbackQuestions(assessment?.questionCount || 10),
+  );
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -101,12 +99,7 @@ export function QuizScreen() {
       (item) => item.moduleId === assessment.moduleId && item.dayOfWeek === dayOfWeek,
     );
 
-    if (
-      matchingSession &&
-      !attendance.some(
-        (record) => record.scheduleId === matchingSession.id && record.date === todayKey,
-      )
-    ) {
+    if (matchingSession) {
       addAttendance({
         id: `attendance-${matchingSession.id}-${todayKey}`,
         scheduleId: matchingSession.id,

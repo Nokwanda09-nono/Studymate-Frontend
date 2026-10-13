@@ -1,6 +1,5 @@
 import { NavigationContainer } from "@react-navigation/native";
 import * as Linking from 'expo-linking';
-import React from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "./src/context/AuthContext";
 import { StoreProvider } from "./src/context/StoreContext";
@@ -40,13 +39,13 @@ const linking = {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <StoreProvider>
-        <AuthProvider>
+      <AuthProvider>
+        <StoreProvider>
           <NavigationContainer linking={linking}>
             <AppNavigator />
           </NavigationContainer>
-        </AuthProvider>
-      </StoreProvider>
+        </StoreProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

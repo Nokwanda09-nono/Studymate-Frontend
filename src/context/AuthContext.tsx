@@ -1,16 +1,13 @@
+// src/context/AuthContext.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Platform } from 'react-native';
-import { API_URL as CONFIG_API_URL } from "../config/api";
+import { API_URL } from "../config/api";
 import { INITIAL_STUDY_POINTS, getStudyTier } from "../utils/studyPoints";
 
-const LOCAL_API_URL = Platform.OS === 'android'
-  ? 'http://localhost:5000/api'
-  : 'http://localhost:5000/api';
-
-const API_URL = CONFIG_API_URL && CONFIG_API_URL !== 'https://study-mate-v1-ten.vercel.app/api'
-  ? CONFIG_API_URL
-  : LOCAL_API_URL;
+interface LoginError extends Error {
+  requiresVerification?: boolean;
+  statusCode?: number;
+}
 
 // Define User type
 export interface User {
@@ -24,6 +21,7 @@ export interface User {
 }
 
 export interface OnboardingProfile {
+  selectedAvatar?: string;
   qualification: string;
   year: string;
   fieldOfStudy?: string;
@@ -84,7 +82,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const mergeStoredUserData = async (incomingUser: Partial<User> | null | undefined): Promise<User | null> => {
+  const mergeStoredUserData = async (
+    incomingUser: Partial<User> | null | undefined
+  ): Promise<User | null> => {
     try {
       const storedUserData = await AsyncStorage.getItem('userData');
       const parsedStoredUser = storedUserData ? JSON.parse(storedUserData) : null;
@@ -96,7 +96,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         email: incomingUser?.email || parsedStoredUser?.email || '',
         firstName: incomingUser?.firstName || parsedStoredUser?.firstName || '',
         lastName: incomingUser?.lastName || parsedStoredUser?.lastName || '',
-        emailVerified: incomingUser?.emailVerified ?? parsedStoredUser?.emailVerified ?? true,
+        emailVerified:
+          incomingUser?.emailVerified ??
+          parsedStoredUser?.emailVerified ??
+          true,
         onboardingCompleted: Boolean(
           incomingUser?.onboardingCompleted ??
           parsedStoredUser?.onboardingCompleted ??
@@ -123,36 +126,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  // Load user from storage on app start
+  // Require a fresh backend login each time the app starts.
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const token = await AsyncStorage.getItem('authToken');
-        const userData = await AsyncStorage.getItem('userData');
-        
-        if (token && userData) {
-          const storedUser = JSON.parse(userData);
-          setAuthToken(token);
-          setUser(storedUser);
-        } else {
-          const onboardingDone = await AsyncStorage.getItem('onboardingCompleted');
-          const onboardingProfile = await AsyncStorage.getItem('onboardingProfile');
-          if (onboardingDone === 'true' && onboardingProfile) {
-            const savedProfile = JSON.parse(onboardingProfile);
-            const restoredUser = {
-              id: 'local-user',
-              email: '',
-              firstName: '',
-              lastName: '',
-              emailVerified: true,
-              onboardingCompleted: true,
-              profile: savedProfile,
-            };
-            setUser(restoredUser);
-          }
-        }
+        await AsyncStorage.multiRemove(['authToken', 'userData']);
+        setAuthToken(null);
+        setUser(null);
       } catch (error) {
-        console.error('Error loading auth data:', error);
+        console.error('Error clearing the previous login session:', error);
       } finally {
         setLoading(false);
       }
@@ -163,7 +145,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Helper function to make authenticated requests
   const authenticatedFetch = async (endpoint: string, options: RequestInit = {}) => {
     const token = await AsyncStorage.getItem('authToken');
-    
+
     if (!token) {
       throw new Error('No authentication token found');
     }
@@ -198,52 +180,89 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Login function
   const login = async (email: string, password: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !password) {
+      throw new Error('Enter both your email address and password.');
+    }
+
+    let response: Response;
     try {
-      console.log('🔐 Attempting login for:', email);
-      
-      const response = await fetch(`${API_URL}/login`, {
+      response = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       });
-
-      let data;
-      try {
-        data = await parseJsonResponse(response);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Login failed';
-        throw new Error(message);
-      }
-
-      console.log('📦 Login response:', data);
-
-      if (!response.ok) {
-        const error = new Error(data.error || data.message || 'Login failed');
-        (error as any).requiresVerification = data.requiresVerification || false;
-        (error as any).statusCode = response.status;
-        throw error;
-      }
-
-      const mergedUser = await mergeStoredUserData(data.user);
-      if (mergedUser) {
-        await AsyncStorage.setItem('userData', JSON.stringify(mergedUser));
-      }
-      
-      setAuthToken(data.token);
-      setUser(mergedUser);
-      
-      console.log('✅ Login successful for:', mergedUser?.email || data.user?.email);
-      return data;
     } catch (error) {
-      console.error('❌ Login error:', error);
+      console.error('Login request could not reach the server:', error);
+      throw new Error(
+        'Could not connect to the StudyMate server. Check your internet connection and confirm the backend is running and reachable from this device.',
+      );
+    }
+
+    const data = await parseJsonResponse(response);
+
+    if (!response.ok) {
+      const error = new Error(
+        data.error || data.message || `Login failed (HTTP ${response.status}).`,
+      ) as LoginError;
+      error.requiresVerification = data.requiresVerification === true;
+      error.statusCode = response.status;
       throw error;
     }
+
+    if (typeof data.token !== 'string' || !data.token.trim() || !data.user) {
+      throw new Error('The server did not return a valid login session. Please try again.');
+    }
+
+    const loginToken = data.token.trim().replace(/^(?:Bearer\s+)+/i, '');
+    if (!loginToken || /\s/.test(loginToken)) {
+      throw new Error('The server returned an invalid login session. Please try again.');
+    }
+
+    let validationResponse: Response;
+    try {
+      validationResponse = await fetch(`${API_URL}/protected`, {
+        headers: {
+          Authorization: `Bearer ${loginToken}`,
+        },
+      });
+    } catch (error) {
+      console.error('Could not validate the new login session:', error);
+      throw new Error(
+        'Login succeeded, but the session could not be validated. Check the backend connection and try again.',
+      );
+    }
+
+    const validationData = await parseJsonResponse(validationResponse);
+    if (!validationResponse.ok) {
+      throw new Error(
+        `Login succeeded, but the backend rejected the session: ${
+          validationData.error || `HTTP ${validationResponse.status}`
+        }`,
+      );
+    }
+
+    const mergedUser = await mergeStoredUserData(data.user);
+    if (!mergedUser) {
+      throw new Error('The server did not return valid account details. Please try again.');
+    }
+
+    await AsyncStorage.setItem('userData', JSON.stringify(mergedUser));
+    await AsyncStorage.setItem('authToken', loginToken);
+    setAuthToken(loginToken);
+    setUser(mergedUser);
+    return data;
   };
 
   // Register function
-  const register = async (firstName: string, lastName: string, email: string, password: string) => {
+  const register = async (
+    firstName: string,
+    lastName: string,
+    email: string,
+    password: string
+  ) => {
     try {
       const response = await fetch(`${API_URL}/register`, {
         method: 'POST',
@@ -260,19 +279,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       await AsyncStorage.setItem('pendingVerificationEmail', email);
-      await AsyncStorage.setItem('pendingUserData', JSON.stringify({ firstName, lastName, email }));
+      await AsyncStorage.setItem(
+        'pendingUserData',
+        JSON.stringify({ firstName, lastName, email })
+      );
       return data;
     } catch (error) {
       throw error;
     }
   };
 
-  // Verify email with 6-digit code and auto-login to Onboarding screen (for new users)
+  // Verify email with 6-digit code
   const verifyEmail = async (code: string, email?: string) => {
     try {
-      const emailToVerify = email || (await AsyncStorage.getItem('pendingVerificationEmail'));
+      const emailToVerify =
+        email || (await AsyncStorage.getItem('pendingVerificationEmail'));
       const pendingUserDataStr = await AsyncStorage.getItem('pendingUserData');
-      const pendingUserData = pendingUserDataStr ? JSON.parse(pendingUserDataStr) : {};
+      const pendingUserData = pendingUserDataStr
+        ? JSON.parse(pendingUserDataStr)
+        : {};
 
       if (!emailToVerify) {
         throw new Error('Email is missing for verification');
@@ -298,19 +323,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const previousUser = storedUserData ? JSON.parse(storedUserData) : null;
 
       const verifiedUser: User = {
-        id: data.user?.id || previousUser?.id || user?.id || 'user_' + Date.now(),
+        id:
+          data.user?.id ||
+          previousUser?.id ||
+          user?.id ||
+          'user_' + Date.now(),
         email: emailToVerify,
-        firstName: data.user?.firstName || previousUser?.firstName || user?.firstName || pendingUserData.firstName || '',
-        lastName: data.user?.lastName || previousUser?.lastName || user?.lastName || pendingUserData.lastName || '',
+        firstName:
+          data.user?.firstName ||
+          previousUser?.firstName ||
+          user?.firstName ||
+          pendingUserData.firstName ||
+          '',
+        lastName:
+          data.user?.lastName ||
+          previousUser?.lastName ||
+          user?.lastName ||
+          pendingUserData.lastName ||
+          '',
         emailVerified: true,
-        onboardingCompleted: Boolean(isAlreadyOnboarded || previousUser?.onboardingCompleted || false),
-        profile: data.user?.profile || previousUser?.profile || user?.profile || null,
+        onboardingCompleted: Boolean(
+          isAlreadyOnboarded || previousUser?.onboardingCompleted || false
+        ),
+        profile:
+          data.user?.profile || previousUser?.profile || user?.profile || null,
       };
 
-      const sessionToken = data.token || authToken || `token_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-      await AsyncStorage.setItem('authToken', sessionToken);
-      setAuthToken(sessionToken);
-      
+      // Only persist a token if the server actually returned one.
+      // Do NOT fabricate a fake token — that leads to silent 401s everywhere.
+      const sessionToken = data.token || authToken;
+
+      if (sessionToken) {
+        await AsyncStorage.setItem('authToken', sessionToken);
+        setAuthToken(sessionToken);
+      } else {
+        console.warn(
+          '⚠️ verifyEmail: server did not return a token. User will need to log in.'
+        );
+      }
+
       await AsyncStorage.setItem('userData', JSON.stringify(verifiedUser));
       setUser(verifiedUser);
 
@@ -329,7 +380,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       '/forgot-password',
       '/password-reset',
       '/request-password-reset',
-      '/reset-password'
+      '/reset-password',
     ];
 
     let lastError: Error | null = null;
@@ -351,12 +402,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         const data = await parseJsonResponse(response);
 
         if (!response.ok) {
-          throw new Error(data.error || data.message || 'Failed to request password reset');
+          throw new Error(
+            data.error || data.message || 'Failed to request password reset'
+          );
         }
 
         return data;
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error('Failed to request password reset');
+        lastError =
+          error instanceof Error
+            ? error
+            : new Error('Failed to request password reset');
       }
     }
 
@@ -377,7 +433,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const data = await parseJsonResponse(response);
 
       if (!response.ok) {
-        throw new Error(data.error || data.message || 'Failed to resend verification email');
+        throw new Error(
+          data.error || data.message || 'Failed to resend verification email'
+        );
       }
 
       return data;
@@ -389,9 +447,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Logout function
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem('authToken');
-      await AsyncStorage.removeItem('pendingVerificationEmail');
-      
+      await AsyncStorage.multiRemove([
+        'authToken',
+        'userData',
+        'pendingVerificationEmail',
+      ]);
+
       setAuthToken(null);
       setUser(null);
     } catch (error) {
@@ -420,38 +481,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         lowPointsAlertSent: false,
         accountDeletionWarning: false,
       };
-      
+
+      // Read the real token from storage. Do NOT fabricate one.
       let token = await AsyncStorage.getItem('authToken');
       if (!token && authToken) {
         token = authToken;
       }
-      if (!token) {
-        token = `token_${Date.now()}`;
-        await AsyncStorage.setItem('authToken', token);
-        setAuthToken(token);
-      }
 
       let data: any = { success: true, profile: normalizedProfile };
-      try {
-        const response = await fetch(`${API_URL}/onboarding`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify(normalizedProfile),
-        });
 
-        if (response.ok) {
-          data = await response.json();
+      if (token) {
+        try {
+          const response = await fetch(`${API_URL}/onboarding`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(normalizedProfile),
+          });
+
+          if (response.ok) {
+            data = await response.json();
+          } else {
+            const errBody = await response.json().catch(() => ({}));
+            console.warn(
+              '⚠️ Onboarding save returned non-OK status, storing locally:',
+              response.status,
+              errBody
+            );
+          }
+        } catch (networkError) {
+          console.warn(
+            '⚠️ Network profile save note, storing locally:',
+            networkError
+          );
         }
-      } catch (networkError) {
-        console.warn('⚠️ Network profile save note, storing locally:', networkError);
+      } else {
+        console.warn(
+          '⚠️ No auth token available — saving onboarding profile locally only.'
+        );
       }
 
       const savedProfile = data?.profile || normalizedProfile;
-      const updatedUser: User = { 
-        ...user, 
+      const updatedUser: User = {
+        ...user,
         ...(data?.user || {}),
         id: user?.id || data?.user?.id || 'user_' + Date.now(),
         email: user?.email || data?.user?.email || '',
@@ -459,12 +533,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         lastName: user?.lastName || data?.user?.lastName || '',
         emailVerified: true,
         onboardingCompleted: true,
-        profile: savedProfile
+        profile: savedProfile,
       };
-      
+
       await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
       await AsyncStorage.setItem('onboardingCompleted', 'true');
-      await AsyncStorage.setItem('onboardingProfile', JSON.stringify(savedProfile));
+      await AsyncStorage.setItem(
+        'onboardingProfile',
+        JSON.stringify(savedProfile)
+      );
       await AsyncStorage.setItem('profile', JSON.stringify(savedProfile));
       setUser(updatedUser);
 
@@ -472,37 +549,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (error: any) {
       console.error('❌ Error saving onboarding profile:', error);
       if (user) {
-        const fallbackUser: User = { 
-          ...user, 
+        const fallbackProfile: any = {
+          ...profileData,
+          academicLevel: profileData.qualification,
+          fieldOfStudy: profileData.fieldOfStudy || '',
+          studyStyle: profileData.learningStyle,
+          studyHoursPerDay: profileData.studyHours || '',
+          studyDaysPerWeek: profileData.studyDaysPerWeek ?? '',
+          preferredStudyTime: profileData.productiveTime,
+          studyChallenges: profileData.studyChallenges || [],
+        };
+        const fallbackUser: User = {
+          ...user,
           emailVerified: true,
           onboardingCompleted: true,
-          profile: {
-            ...profileData,
-            academicLevel: profileData.qualification,
-            fieldOfStudy: profileData.fieldOfStudy || '',
-            studyStyle: profileData.learningStyle,
-            studyHoursPerDay: profileData.studyHours || '',
-            studyDaysPerWeek: profileData.studyDaysPerWeek ?? '',
-            preferredStudyTime: profileData.productiveTime,
-            studyChallenges: profileData.studyChallenges || [],
-          } as any
+          profile: fallbackProfile,
         };
         await AsyncStorage.setItem('userData', JSON.stringify(fallbackUser));
         await AsyncStorage.setItem('onboardingCompleted', 'true');
-        await AsyncStorage.setItem('onboardingProfile', JSON.stringify(fallbackUser.profile));
-        await AsyncStorage.setItem('profile', JSON.stringify(fallbackUser.profile));
+        await AsyncStorage.setItem(
+          'onboardingProfile',
+          JSON.stringify(fallbackProfile)
+        );
+        await AsyncStorage.setItem('profile', JSON.stringify(fallbackProfile));
         setUser(fallbackUser);
       }
-      return { success: true, profile: {
-        ...profileData,
-        academicLevel: profileData.qualification,
-        fieldOfStudy: profileData.fieldOfStudy || '',
-        studyStyle: profileData.learningStyle,
-        studyHoursPerDay: profileData.studyHours || '',
-        studyDaysPerWeek: profileData.studyDaysPerWeek ?? '',
-        preferredStudyTime: profileData.productiveTime,
-        studyChallenges: profileData.studyChallenges || [],
-      } as any };
+      return {
+        success: true,
+        profile: {
+          ...profileData,
+          academicLevel: profileData.qualification,
+          fieldOfStudy: profileData.fieldOfStudy || '',
+          studyStyle: profileData.learningStyle,
+          studyHoursPerDay: profileData.studyHours || '',
+          studyDaysPerWeek: profileData.studyDaysPerWeek ?? '',
+          preferredStudyTime: profileData.productiveTime,
+          studyChallenges: profileData.studyChallenges || [],
+        } as any,
+      };
     }
   };
 
@@ -512,7 +596,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const data = await authenticatedFetch('/onboarding');
       return data.profile || null;
     } catch (error: any) {
-      if (error.message.includes('404') || error.message.includes('not found')) {
+      if (
+        error.message.includes('404') ||
+        error.message.includes('not found')
+      ) {
         return user?.profile || null;
       }
       console.error('Error fetching onboarding profile:', error);
@@ -544,7 +631,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             body: JSON.stringify({
               firstName: userData.firstName,
               lastName: userData.lastName,
-              ...(userData.profile || {})
+              ...(userData.profile || {}),
             }),
           });
         } catch (err) {

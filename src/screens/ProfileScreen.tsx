@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
-  Dimensions,
   FlatList,
   Modal,
   ScrollView,
@@ -17,9 +16,8 @@ import {
 import { BottomNav } from "../components/ButtomNav";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
+import { AVATAR_CATEGORIES, AVATAR_OPTIONS } from "../lib/avatarOptions";
 import { getStudyTier } from "../utils/studyPoints";
-
-const { width } = Dimensions.get("window");
 
 interface DropdownOption {
   label: string;
@@ -38,19 +36,6 @@ interface EditableProfile {
   preferredStudyTime: string;
   studyChallenges: string[];
 }
-
-const AVATAR_OPTIONS = [
-  { id: "default", label: "Default", emoji: "", color: "#dbeafe" },
-  { id: "fox", label: "Fox", emoji: "🦊", color: "#fed7aa" },
-  { id: "panda", label: "Panda", emoji: "🐼", color: "#e0e7ff" },
-  { id: "rabbit", label: "Rabbit", emoji: "🐰", color: "#fbcfe8" },
-  { id: "tiger", label: "Tiger", emoji: "🐯", color: "#fde68a" },
-  { id: "penguin", label: "Penguin", emoji: "🐧", color: "#bfdbfe" },
-  { id: "robot", label: "Robot", emoji: "🤖", color: "#bae6fd" },
-  { id: "wizard", label: "Wizard", emoji: "🧙", color: "#ddd6fe" },
-  { id: "astronaut", label: "Astronaut", emoji: "🧑‍🚀", color: "#cffafe" },
-  { id: "artist", label: "Artist", emoji: "🎨", color: "#fecdd3" },
-];
 
 function MetallicStudyBadge({ tier }: { tier: ReturnType<typeof getStudyTier> }) {
   const shine = useRef(new Animated.Value(-1)).current;
@@ -322,6 +307,10 @@ export function ProfileScreen() {
   const selectedAvatar = AVATAR_OPTIONS.find((avatar) => avatar.id === selectedAvatarId) || AVATAR_OPTIONS[0];
 
   const handleAvatarSelect = async (avatarId: string) => {
+    if (!isEditing) {
+      return;
+    }
+
     const nextProfile = {
       ...(profile || userProf),
       selectedAvatar: avatarId,
@@ -550,8 +539,9 @@ export function ProfileScreen() {
           style={styles.profileHeader}
         >
           <TouchableOpacity
-            style={styles.avatarContainer}
-            onPress={() => setAvatarPickerVisible(true)}
+            style={[styles.avatarContainer, !isEditing && styles.avatarContainerLocked]}
+            onPress={() => isEditing && setAvatarPickerVisible(true)}
+            disabled={!isEditing}
             activeOpacity={0.85}
           >
             {selectedAvatar.emoji ? (
@@ -559,9 +549,11 @@ export function ProfileScreen() {
             ) : (
               <Ionicons name="person" size={50} color="white" />
             )}
-            <View style={styles.avatarEditBadge}>
-              <Ionicons name="camera" size={13} color="#123d1a" />
-            </View>
+            {isEditing && (
+              <View style={styles.avatarEditBadge}>
+                <Ionicons name="camera" size={13} color="#123d1a" />
+              </View>
+            )}
           </TouchableOpacity>
           <Text style={styles.userName}>{getDisplayName()}</Text>
           <View style={styles.roleBadge}>
@@ -931,7 +923,7 @@ export function ProfileScreen() {
       </Modal>
 
       <Modal
-        visible={avatarPickerVisible}
+        visible={avatarPickerVisible && isEditing}
         transparent
         animationType="slide"
         onRequestClose={() => setAvatarPickerVisible(false)}
@@ -948,38 +940,50 @@ export function ProfileScreen() {
               </TouchableOpacity>
             </View>
             <FlatList
-              data={AVATAR_OPTIONS}
-              numColumns={4}
-              keyExtractor={(item) => item.id}
+              data={AVATAR_CATEGORIES}
+              keyExtractor={(item) => item.title}
               contentContainerStyle={styles.avatarGrid}
-              renderItem={({ item }) => {
-                const isSelected = item.id === selectedAvatarId;
+              renderItem={({ item: category }) => {
                 return (
-                  <TouchableOpacity
-                    style={styles.avatarOption}
-                    onPress={() => void handleAvatarSelect(item.id)}
-                    activeOpacity={0.8}
-                  >
-                    <View
-                      style={[
-                        styles.avatarOptionCircle,
-                        { backgroundColor: item.color },
-                        isSelected && styles.avatarOptionSelected,
-                      ]}
-                    >
-                      {item.emoji ? (
-                        <Text style={styles.avatarOptionEmoji}>{item.emoji}</Text>
-                      ) : (
-                        <Ionicons name="person" size={30} color="#ffffff" />
-                      )}
-                      {isSelected && (
-                        <View style={styles.avatarCheckBadge}>
-                          <Ionicons name="checkmark" size={12} color="#ffffff" />
-                        </View>
-                      )}
+                  <View style={styles.avatarCategory}>
+                    <View style={styles.avatarCategoryHeader}>
+                      <Ionicons name={category.icon} size={18} color="#155e2a" />
+                      <Text style={styles.avatarCategoryTitle}>{category.title}</Text>
                     </View>
-                    <Text style={styles.avatarOptionLabel}>{item.label}</Text>
-                  </TouchableOpacity>
+                    <View style={styles.avatarCategoryGrid}>
+                      {category.avatars.map((item) => {
+                        const isSelected = item.id === selectedAvatarId;
+                        return (
+                          <TouchableOpacity
+                            key={item.id}
+                            style={styles.avatarOption}
+                            onPress={() => void handleAvatarSelect(item.id)}
+                            activeOpacity={0.8}
+                          >
+                            <View
+                              style={[
+                                styles.avatarOptionCircle,
+                                { backgroundColor: item.color },
+                                isSelected && styles.avatarOptionSelected,
+                              ]}
+                            >
+                              {item.emoji ? (
+                                <Text style={styles.avatarOptionEmoji}>{item.emoji}</Text>
+                              ) : (
+                                <Ionicons name="person" size={30} color="#ffffff" />
+                              )}
+                              {isSelected && (
+                                <View style={styles.avatarCheckBadge}>
+                                  <Ionicons name="checkmark" size={12} color="#ffffff" />
+                                </View>
+                              )}
+                            </View>
+                            <Text style={styles.avatarOptionLabel}>{item.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
                 );
               }}
             />
@@ -1017,6 +1021,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 3,
     borderColor: "rgba(255, 255, 255, 0.4)",
+  },
+  avatarContainerLocked: {
+    opacity: 0.98,
   },
   avatarEmoji: {
     fontSize: 52,
@@ -1467,6 +1474,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 14,
     paddingBottom: 28,
+  },
+  avatarCategory: {
+    marginBottom: 10,
+  },
+  avatarCategoryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ecfdf5",
+  },
+  avatarCategoryTitle: {
+    fontSize: 15,
+    color: "#14532d",
+    fontWeight: "700",
+  },
+  avatarCategoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
   avatarOption: {
     width: "25%",
