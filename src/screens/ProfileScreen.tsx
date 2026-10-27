@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Animated,
   FlatList,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { BottomNav } from "../components/ButtomNav";
+import { WebLayout } from "../components/WebLayout";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import { AVATAR_CATEGORIES, AVATAR_OPTIONS } from "../lib/avatarOptions";
@@ -38,9 +40,9 @@ interface EditableProfile {
 }
 
 function MetallicStudyBadge({ tier }: { tier: ReturnType<typeof getStudyTier> }) {
-  const shine = useRef(new Animated.Value(-1)).current;
-  const orbit = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(1)).current;
+  const [shine] = useState(() => new Animated.Value(-1));
+  const [orbit] = useState(() => new Animated.Value(0));
+  const [pulse] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     const shineAnimation = Animated.loop(
@@ -348,7 +350,7 @@ export function ProfileScreen() {
       await setProfile(profileData);
       setIsEditing(false);
       Alert.alert("Success", "Profile updated successfully!");
-    } catch (error) {
+    } catch {
       Alert.alert("Error", "Failed to update profile. Please try again.");
     }
   };
@@ -372,10 +374,16 @@ export function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Logout", style: "destructive", onPress: logout },
-    ]);
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm("Are you sure you want to logout?")) {
+        logout();
+      }
+    } else {
+      Alert.alert("Logout", "Are you sure you want to logout?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Logout", style: "destructive", onPress: logout },
+      ]);
+    }
   };
 
   const renderEditableField = (
@@ -525,12 +533,288 @@ export function ProfileScreen() {
       : 1000;
   const studyTier = getStudyTier(studyPoints);
 
+  if (Platform.OS === "web") {
+    return (
+      <WebLayout>
+        <ScrollView style={styles.webProfileScroll} contentContainerStyle={styles.webProfileContent} showsVerticalScrollIndicator={false}>
+          {/* TOP PROFILE BANNER */}
+          <LinearGradient
+            colors={["#0f766e", "#115e59"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.webHeaderCard}
+          >
+            <View style={styles.webHeaderLeft}>
+              <TouchableOpacity
+                style={[styles.avatarContainer, !isEditing && styles.avatarContainerLocked]}
+                onPress={() => isEditing && setAvatarPickerVisible(true)}
+                disabled={!isEditing}
+              >
+                {selectedAvatar.emoji ? (
+                  <Text style={styles.avatarEmoji}>{selectedAvatar.emoji}</Text>
+                ) : (
+                  <Ionicons name="person" size={44} color="white" />
+                )}
+                {isEditing && (
+                  <View style={styles.avatarEditBadge}>
+                    <Ionicons name="camera" size={12} color="#0f766e" />
+                  </View>
+                )}
+              </TouchableOpacity>
+              <View style={styles.webHeaderMeta}>
+                <Text style={styles.webHeaderName}>{getDisplayName()}</Text>
+                <View style={styles.webHeaderSubRow}>
+                  <View style={styles.webRoleBadge}>
+                    <Ionicons name="school-outline" size={13} color="#99f6e4" />
+                    <Text style={styles.webRoleText}>{getUserRole()}</Text>
+                  </View>
+                  <Text style={styles.webEmailText}>{authUser?.email}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.webHeaderActions}>
+              {isEditing ? (
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <TouchableOpacity style={styles.webCancelBtn} onPress={handleCancel}>
+                    <Text style={styles.webCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.webSaveBtn} onPress={handleSave}>
+                    <Ionicons name="checkmark" size={16} color="white" />
+                    <Text style={styles.webSaveText}>Save Changes</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <TouchableOpacity style={styles.webEditBtn} onPress={() => setIsEditing(true)}>
+                    <Ionicons name="create-outline" size={16} color="#0f766e" />
+                    <Text style={styles.webEditText}>Edit Profile</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.webLogoutBtn} onPress={handleLogout}>
+                    <Ionicons name="log-out-outline" size={16} color="#ef4444" />
+                    <Text style={styles.webLogoutText}>Logout</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </LinearGradient>
+
+          {/* 2-COLUMN DASHBOARD WORKSPACE */}
+          <View style={styles.webDashboardGrid}>
+            {/* LEFT COLUMN: Personal & Academic Info (60% Width) */}
+            <View style={styles.webLeftCol}>
+              {/* Personal Information */}
+              <View style={styles.webCard}>
+                <View style={styles.webCardHeader}>
+                  <Ionicons name="person-outline" size={18} color="#0f766e" />
+                  <Text style={styles.webCardTitle}>Personal Information</Text>
+                </View>
+                <View style={styles.webCardBody}>
+                  {isEditing ? (
+                    <>
+                      {renderEditableField("First Name", "firstName", editedProfile.firstName)}
+                      {renderEditableField("Last Name", "lastName", editedProfile.lastName)}
+                    </>
+                  ) : (
+                    <View style={styles.webFieldsGrid}>
+                      {renderViewField("First Name", authUser?.firstName, undefined, "person-outline")}
+                      {renderViewField("Last Name", authUser?.lastName, undefined, "person-outline")}
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Academic Information */}
+              <View style={styles.webCard}>
+                <View style={styles.webCardHeader}>
+                  <Ionicons name="library-outline" size={18} color="#0f766e" />
+                  <Text style={styles.webCardTitle}>Academic Information</Text>
+                </View>
+                <View style={styles.webCardBody}>
+                  {isEditing ? (
+                    <>
+                      {renderEditableField("Academic Level", "academicLevel", editedProfile.academicLevel, true)}
+                      {renderEditableField("Field of Study", "fieldOfStudy", editedProfile.fieldOfStudy, true)}
+                      {renderEditableField("Academic Goal", "academicGoal", editedProfile.academicGoal, true)}
+                      {renderEditableField("Study Style", "studyStyle", editedProfile.studyStyle, true)}
+                      {renderEditableField("Study Hours/Day", "studyHoursPerDay", editedProfile.studyHoursPerDay, false, false, "numeric")}
+                      {renderEditableField("Study Days/Week", "studyDaysPerWeek", editedProfile.studyDaysPerWeek, false, false, "numeric")}
+                      {renderEditableField("Preferred Study Time", "preferredStudyTime", editedProfile.preferredStudyTime, true)}
+                      {renderEditableField("Study Challenges", "studyChallenges", "", true, true)}
+                    </>
+                  ) : (
+                    <View style={styles.webFieldsGrid}>
+                      {renderViewField("Academic Level", mergedProfile?.academicLevel || mergedProfile?.qualification || profile?.academicLevel, "academicLevel", "school-outline")}
+                      {renderViewField("Field of Study", mergedProfile?.fieldOfStudy || profile?.fieldOfStudy, "fieldOfStudy", "book-outline")}
+                      {renderViewField("Academic Goal", mergedProfile?.academicGoal || profile?.academicGoal, "academicGoal", "flag-outline")}
+                      {renderViewField("Study Style", mergedProfile?.studyStyle || mergedProfile?.learningStyle || profile?.studyStyle, "studyStyle", "bulb-outline")}
+                      {renderViewField("Study Hours/Day", mergedProfile?.studyHoursPerDay || mergedProfile?.studyHours || profile?.studyHoursPerDay, undefined, "time-outline")}
+                      {renderViewField("Study Days/Week", mergedProfile?.studyDaysPerWeek || profile?.studyDaysPerWeek, undefined, "calendar-outline")}
+                      {renderViewField("Preferred Study Time", mergedProfile?.preferredStudyTime || mergedProfile?.productiveTime || profile?.preferredStudyTime, "preferredStudyTime", "moon-outline")}
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            {/* RIGHT COLUMN: Study Rank & Study Reports (40% Width) */}
+            <View style={styles.webRightCol}>
+              {/* Study Rank Card */}
+              <View style={styles.webCard}>
+                <View style={styles.webCardHeader}>
+                  <Ionicons name="trophy-outline" size={18} color="#0f766e" />
+                  <Text style={styles.webCardTitle}>Study Rank & Rewards</Text>
+                </View>
+                <View style={styles.pointsCard}>
+                  <View style={styles.pointsArtworkWrap}>
+                    <MetallicStudyBadge tier={studyTier} />
+                  </View>
+                  <View style={styles.pointsInfo}>
+                    <Text style={styles.pointsEyebrow}>CURRENT RANK</Text>
+                    <Text style={styles.pointsTier}>{studyTier.label}</Text>
+                    <View style={styles.pointsValueRow}>
+                      <Text style={styles.pointsValue}>{studyPoints}</Text>
+                      <Text style={styles.pointsUnit}> points</Text>
+                    </View>
+                    <Text style={styles.pointsHint}>
+                      {studyPoints <= 100
+                        ? "Points are low. Attend sessions to protect your rank."
+                        : "Attend scheduled study sessions to earn rank rewards."}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Study Reports Card */}
+              <View style={styles.webCard}>
+                <View style={styles.webCardHeader}>
+                  <Ionicons name="bar-chart-outline" size={18} color="#0f766e" />
+                  <Text style={styles.webCardTitle}>Study Reports</Text>
+                </View>
+                <View style={styles.webCardBody}>
+                  {moduleReports.length === 0 ? (
+                    <Text style={styles.emptyReportText}>No study module progress recorded yet.</Text>
+                  ) : (
+                    moduleReports.map(({ module, progress, averageScore, completedAssessments }) => (
+                      <View key={module.id} style={styles.reportItem}>
+                        <View style={styles.reportHeaderRow}>
+                          <Text style={styles.reportTitle}>{module.name}</Text>
+                          <Text style={styles.reportScoreText}>{averageScore}%</Text>
+                        </View>
+                        <View style={styles.progressTrack}>
+                          <View style={[styles.progressFill, { width: `${Math.max(progress, 8)}%`, backgroundColor: module.color }]} />
+                        </View>
+                        <Text style={styles.reportMetaText}>{completedAssessments} assessments completed ({progress}% progress)</Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Avatar Picker Modal */}
+        <Modal
+          visible={avatarPickerVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setAvatarPickerVisible(false)}
+        >
+          <TouchableOpacity style={styles.avatarModalOverlay} activeOpacity={1} onPress={() => setAvatarPickerVisible(false)}>
+            <View style={styles.avatarModalCard}>
+              <View style={styles.avatarModalHeader}>
+                <Text style={styles.avatarModalTitle}>Choose Your Avatar</Text>
+                <TouchableOpacity onPress={() => setAvatarPickerVisible(false)}>
+                  <Ionicons name="close" size={24} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={AVATAR_CATEGORIES}
+                keyExtractor={(item) => item.title}
+                renderItem={({ item: category }) => (
+                  <View style={styles.avatarCategorySection}>
+                    <Text style={styles.avatarCategoryTitle}>{category.title}</Text>
+                    <View style={styles.avatarGrid}>
+                      {category.avatars.map((option) => {
+                        const isSelected = selectedAvatar.id === option.id;
+                        return (
+                          <TouchableOpacity
+                            key={option.id}
+                            style={[styles.avatarOptionItem, isSelected && styles.avatarOptionSelected]}
+                            onPress={() => {
+                              handleAvatarSelect(option.id);
+                            }}
+                          >
+                            <View style={[styles.avatarOptionCircle, { backgroundColor: option.color }]}>
+                              <Text style={styles.avatarOptionEmoji}>{option.emoji}</Text>
+                              {isSelected && (
+                                <View style={styles.avatarCheckBadge}>
+                                  <Ionicons name="checkmark" size={12} color="#ffffff" />
+                                </View>
+                              )}
+                            </View>
+                            <Text style={styles.avatarOptionLabel}>{option.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* Dropdown Modal */}
+        <Modal
+          visible={!!showDropdown}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowDropdown(null)}
+        >
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowDropdown(null)}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {dropdownField === "studyChallenges" ? "Select Study Challenges" : `Select ${dropdownField.replace(/([A-Z])/g, " $1").trim()}`}
+                </Text>
+                <TouchableOpacity onPress={() => setShowDropdown(null)}>
+                  <Ionicons name="close" size={24} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={dropdownOptions}
+                keyExtractor={(item) => item.value}
+                renderItem={({ item }) => {
+                  const isSelected = dropdownField === "studyChallenges"
+                    ? (editedProfile.studyChallenges || []).includes(item.value)
+                    : editedProfile[dropdownField as keyof EditableProfile] === item.value;
+                  return (
+                    <TouchableOpacity
+                      style={[styles.modalItem, isSelected && styles.modalItemSelected]}
+                      onPress={() => selectDropdownOption(item.value)}
+                    >
+                      <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>{item.label}</Text>
+                      {isSelected && <Ionicons name="checkmark" size={20} color="#6366f1" />}
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      </WebLayout>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+    <WebLayout>
+      <View style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
         {/* Profile Header with Gradient */}
         <LinearGradient
           colors={["#079900ff", "#21632aff"]}
@@ -993,6 +1277,7 @@ export function ProfileScreen() {
 
       <BottomNav />
     </View>
+  </WebLayout>
   );
 }
 
@@ -1000,8 +1285,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f3f4f6",
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
   },
   scrollContent: {
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 1000 : "100%",
+    alignSelf: "center",
     paddingBottom: 0,
   },
   profileHeader: {
@@ -1599,5 +1888,197 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+
+  // Web Profile Dashboard Styles
+  webProfileScroll: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  webProfileContent: {
+    padding: 24,
+    maxWidth: 1200,
+    width: "100%",
+    alignSelf: "center",
+    gap: 20,
+  },
+  webHeaderCard: {
+    borderRadius: 16,
+    padding: 24,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    shadowColor: "#0f766e",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  webHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+  },
+  webHeaderMeta: {
+    gap: 4,
+  },
+  webHeaderName: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "white",
+  },
+  webHeaderSubRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  webRoleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  webRoleText: {
+    fontSize: 12,
+    color: "white",
+    fontWeight: "600",
+  },
+  webEmailText: {
+    fontSize: 13,
+    color: "#ccfbf1",
+  },
+  webHeaderActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  webEditBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "white",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    cursor: "pointer" as any,
+  },
+  webEditText: {
+    color: "#0f766e",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  webLogoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#fef2f2",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    cursor: "pointer" as any,
+  },
+  webLogoutText: {
+    color: "#dc2626",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  webCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.4)",
+    cursor: "pointer" as any,
+  },
+  webCancelText: {
+    color: "white",
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  webSaveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#10b981",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    cursor: "pointer" as any,
+  },
+  webSaveText: {
+    color: "white",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  webDashboardGrid: {
+    flexDirection: "row",
+    gap: 20,
+  },
+  webLeftCol: {
+    flex: 0.6,
+    gap: 20,
+  },
+  webRightCol: {
+    flex: 0.4,
+    gap: 20,
+  },
+  webCard: {
+    backgroundColor: "white",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  webCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    backgroundColor: "#fafafa",
+  },
+  webCardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  webCardBody: {
+    padding: 18,
+  },
+  webFieldsGrid: {
+    gap: 12,
+  },
+  avatarModalCard: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    width: "100%",
+    maxWidth: 520,
+    maxHeight: "80%",
+    alignSelf: "center",
+    marginVertical: "auto" as any,
+  },
+  avatarModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  avatarModalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  avatarCategorySection: {
+    padding: 14,
+  },
+  avatarOptionItem: {
+    alignItems: "center",
+    margin: 6,
+    cursor: "pointer" as any,
   },
 });

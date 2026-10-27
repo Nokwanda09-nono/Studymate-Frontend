@@ -3,6 +3,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useState } from 'react';
 import {
     Alert,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -37,11 +38,13 @@ export function QuizScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { id } = route.params as { id: string };
-  const { assessments, schedule, attendance, updateAssessment, addAttendance } = useStore();
+  const { assessments, schedule, updateAssessment, addAttendance } = useStore();
   
   const assessment = assessments.find(a => a.id === id);
   const [questions] = useState<QuizQuestion[]>(
-    () => assessment?.questions?.length
+    () => assessment?.remoteOnly
+      ? []
+      : assessment?.questions?.length
       ? assessment.questions
       : generateFallbackQuestions(assessment?.questionCount || 10),
   );
@@ -54,6 +57,19 @@ export function QuizScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Assessment not found</Text>
+          <CustomButton title="Go Back" onPress={() => navigation.goBack()} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (assessment.remoteOnly) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>
+            This assessment is managed by your institution and cannot be taken in the local quiz runner.
+          </Text>
           <CustomButton title="Go Back" onPress={() => navigation.goBack()} />
         </View>
       </SafeAreaView>
@@ -187,7 +203,7 @@ export function QuizScreen() {
                     <Text style={styles.reviewQuestion}>{question.question}</Text>
                   </View>
                   <View style={styles.reviewOptions}>
-                    {question.options.map((option, optionIndex) => {
+                    {(question.options || []).map((option, optionIndex) => {
                       const isSelected = selectedAnswers[index] === optionIndex;
                       const isCorrectOption = question.correctAnswer === optionIndex;
                       let optionStyle: any = styles.reviewOption;
@@ -240,7 +256,7 @@ export function QuizScreen() {
           <Text style={styles.questionText}>{currentQ.question}</Text>
           
           <View style={styles.optionsContainer}>
-            {currentQ.options.map((option, index) => {
+            {(currentQ.options || []).map((option, index) => {
               const isSelected = selectedAnswers[currentQuestion] === index;
               return (
                 <TouchableOpacity
@@ -287,8 +303,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
   },
   header: {
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 800 : '100%',
+    alignSelf: 'center',
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',

@@ -30,6 +30,29 @@ export interface RemoteStoredFile {
   createdAt?: string;
 }
 
+const MIME_TYPES_BY_EXTENSION: Record<string, string> = {
+  pdf: "application/pdf",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  heic: "image/heic",
+  heif: "image/heif",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  avif: "image/avif",
+};
+
+export const isSupportedStudyFile = (name: string): boolean =>
+  Object.prototype.hasOwnProperty.call(
+    MIME_TYPES_BY_EXTENSION,
+    name.split(".").pop()?.toLowerCase() || "",
+  );
+
 const getAuthHeaders = async (): Promise<Record<string, string>> => {
   const token = await AsyncStorage.getItem("authToken");
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -54,18 +77,27 @@ export async function uploadFileToDatabase(params: {
   type: string;
   size: number;
 }): Promise<{ remoteId: string; remoteUri?: string }> {
+  const extension = params.name.split(".").pop()?.toLowerCase() || "";
+  const mimeType = MIME_TYPES_BY_EXTENSION[extension];
+  if (!mimeType) {
+    throw new Error(
+      "Unsupported file type. Upload a PDF, PPTX, DOCX, or an image (JPG, PNG, GIF, WEBP, BMP, HEIC, TIFF, or AVIF).",
+    );
+  }
+
   const localFileResponse = await fetch(params.uri);
   if (!localFileResponse.ok) {
     throw new Error("The selected file could not be read from device storage.");
   }
 
   const fileBlob = await localFileResponse.blob();
+  const typedBlob = new Blob([fileBlob], { type: mimeType });
   const formData = new FormData();
   formData.append("moduleId", params.moduleId);
   if (params.moduleName) formData.append("moduleName", params.moduleName);
   formData.append("name", params.name);
   formData.append("size", String(params.size));
-  formData.append("file", fileBlob, params.name);
+  formData.append("file", typedBlob, params.name);
 
   const response = await fetch(`${API_URL}/files`, {
     method: "POST",

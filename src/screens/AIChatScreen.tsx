@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   ActivityIndicator,
   Animated,
   FlatList,
@@ -19,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BottomNav } from '../components/ButtomNav';
 import { CustomButton } from '../components/CustomButton';
 import { ProfileAvatar } from '../components/ProfileAvatar';
+import { WebLayout } from '../components/WebLayout';
 import { useStore } from '../context/StoreContext';
 import {
   ChatMessage,
@@ -26,7 +28,8 @@ import {
   createChatSession,
   fetchChatMessages,
   fetchChatSessions,
-  sendChatMessage,
+  sendChatMessageWithAction,
+  StudyTimetableAction,
 } from '../lib/aiChatApi';
 import { Module } from '../lib/store';
 
@@ -48,8 +51,91 @@ const greeting = (moduleName: string | null) =>
     ? `Ask me anything about ${moduleName}. I’ll use its uploaded study materials when available.`
     : "Hello! I'm your AI study assistant. How can I help you today?";
 
+const timeToMinutes = (time: string) => {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+function validateTimetableAction(
+  action: StudyTimetableAction,
+  modules: Module[],
+  schedule: ReturnType<typeof useStore>['schedule'],
+  profile: ReturnType<typeof useStore>['profile'],
+): string | null {
+  const moduleIds = new Set(modules.map((module) => module.id));
+  const dailyStudyGoal = Number(profile?.studyHoursPerDay);
+  const weeklyStudyDays = Number(profile?.studyDaysPerWeek);
+  const generatedDays = new Set<number>();
+  const generatedItems: StudyTimetableAction['items'] = [];
+  const minutesByDay = new Map<number, number>();
+
+  for (const item of action.items) {
+    if (
+      !moduleIds.has(item.moduleId) ||
+      !Number.isInteger(item.dayOfWeek) ||
+      item.dayOfWeek < 0 ||
+      item.dayOfWeek > 6 ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(item.startTime) ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(item.endTime) ||
+      item.startTime >= item.endTime
+    ) {
+      return 'The suggested timetable contains an invalid module or time.';
+    }
+
+    const start = timeToMinutes(item.startTime);
+    const end = timeToMinutes(item.endTime);
+    const conflictsWithExisting = schedule.some(
+      (existing) =>
+        existing.dayOfWeek === item.dayOfWeek &&
+        start < timeToMinutes(existing.endTime) &&
+        end > timeToMinutes(existing.startTime),
+    );
+    const conflictsWithSuggestion = generatedItems.some(
+      (existing) =>
+        existing.dayOfWeek === item.dayOfWeek &&
+        start < timeToMinutes(existing.endTime) &&
+        end > timeToMinutes(existing.startTime),
+    );
+    if (conflictsWithExisting || conflictsWithSuggestion) {
+      return 'The suggested timetable overlaps another scheduled session.';
+    }
+
+    generatedDays.add(item.dayOfWeek);
+    minutesByDay.set(
+      item.dayOfWeek,
+      (minutesByDay.get(item.dayOfWeek) || 0) + end - start,
+    );
+    generatedItems.push(item);
+  }
+
+  if (
+    Number.isFinite(weeklyStudyDays) &&
+    weeklyStudyDays > 0 &&
+    generatedDays.size > weeklyStudyDays
+  ) {
+    return 'The suggested timetable exceeds your selected study days per week.';
+  }
+  if (
+    Number.isFinite(dailyStudyGoal) &&
+    dailyStudyGoal > 0 &&
+    [...minutesByDay.values()].some((minutes) => minutes > dailyStudyGoal * 60)
+  ) {
+    return 'The suggested timetable exceeds your study-hours-per-day goal.';
+  }
+  return null;
+}
+
 export function AIChatScreen() {
-  const { modules, profile } = useStore();
+  const {
+    modules,
+    profile,
+    user,
+    files,
+    schedule,
+    assessments,
+    attendance,
+    addScheduleItem,
+  } = useStore();
   const { width: screenWidth } = useWindowDimensions();
   const drawerWidth = Math.min(360, screenWidth * 0.86);
   const [messages, setMessages] = useState<Message[]>([
@@ -167,11 +253,74 @@ export function AIChatScreen() {
       sessionIdRef.current = sessionId;
       if (!activeSessionTitle) setActiveSessionTitle(message.slice(0, 60));
 
-      const answer = await sendChatMessage(sessionId, message);
+      const response = await sendChatMessageWithAction(sessionId, message, {
+        user: user
+          ? { onboardingCompleted: user.onboardingCompleted }
+          : null,
+        profile,
+        modules: modules.slice(-100),
+        files: files.slice(-50).map(({ name, type, moduleId, uploadedAt }) => ({
+          name,
+          type,
+          moduleId,
+          uploadedAt,
+        })),
+        schedule: schedule.slice(-42),
+        assessments: assessments.slice(-30),
+        attendance: attendance.slice(-30),
+        currentScreen: 'AIChat',
+      });
       setMessages((previous) => [
         ...previous,
-        { id: `${Date.now()}-assistant`, role: 'assistant', content: answer },
+        { id: `${Date.now()}-assistant`, role: 'assistant', content: response.message },
       ]);
+      if (response.action) {
+        const validationError = validateTimetableAction(
+          response.action,
+          modules,
+          schedule,
+          profile,
+        );
+        if (validationError) {
+          Alert.alert('Timetable not applied', validationError);
+        } else {
+          Alert.alert(
+            'Apply suggested timetable?',
+            `Add ${response.action.items.length} study session${response.action.items.length === 1 ? '' : 's'} to your schedule?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Add sessions',
+                onPress: () => {
+                  response.action?.items.forEach((item, index) => {
+                    const module = modules.find(
+                      (candidate) => candidate.id === item.moduleId,
+                    );
+                    addScheduleItem({
+                      id: `ai-${Date.now()}-${index}`,
+                      title: item.title,
+                      moduleId: item.moduleId,
+                      dayOfWeek: item.dayOfWeek,
+                      startTime: item.startTime,
+                      endTime: item.endTime,
+                      color: module?.color || '#35ce61',
+                      is_recurring: true,
+                    });
+                  });
+                  setMessages((previous) => [
+                    ...previous,
+                    {
+                      id: `${Date.now()}-applied`,
+                      role: 'assistant',
+                      content: 'Your study sessions have been added to your timetable.',
+                    },
+                  ]);
+                },
+              },
+            ],
+          );
+        }
+      }
       void refreshSessions();
     } catch (error) {
       console.error('AI chat error:', error);
@@ -266,7 +415,8 @@ export function AIChatScreen() {
   const generalSessions = sessions.filter((session) => !session.module_name);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <WebLayout>
+      <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.content}>
         <View style={styles.header}>
           <Pressable
@@ -488,6 +638,7 @@ export function AIChatScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+  </WebLayout>
   );
 }
 
@@ -498,6 +649,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 1000 : '100%',
+    alignSelf: 'center',
   },
   header: {
     minHeight: 62,
@@ -507,6 +661,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     paddingHorizontal: 8,
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 1000 : '100%',
+    alignSelf: 'center',
   },
   headerButton: {
     width: 44,

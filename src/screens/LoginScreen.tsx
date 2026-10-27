@@ -35,53 +35,54 @@ export function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const isSmallDevice = width < 360 || height < 700;
 
   const handleLogin = async () => {
+    setErrorMessage('');
     const normalizedEmail = email.trim();
     if (!normalizedEmail || !password) {
-      Alert.alert('Login details required', 'Enter both your email address and password.');
+      setErrorMessage('Please enter both your email address and password.');
       return;
     }
 
     setLoading(true);
     try {
       await login(normalizedEmail, password);
-      
-      // After successful login, the useEffect will handle navigation
-      // based on onboarding status
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Unable to log in right now.';
+      setErrorMessage(message);
+
       const requiresVerification =
         typeof error === 'object' &&
         error !== null &&
         'requiresVerification' in error &&
         error.requiresVerification === true;
 
-      // Check if the error is due to unverified email
       if (requiresVerification || /verify your email/i.test(message)) {
-        Alert.alert(
-          'Email Not Verified',
-          'Please verify your email before logging in. Open the verification screen to enter your code or resend it.',
-          [
-            {
-              text: 'Verify Now',
-              onPress: () => navigation.navigate('VerifyEmail', { email: normalizedEmail }),
-            },
-            {
-              text: 'Resend & Verify',
-              onPress: () => handleResendVerification(true),
-            },
-            {
-              text: 'Cancel',
-              style: 'cancel',
-            },
-          ]
-        );
-      } else {
-        Alert.alert('Login Failed', message);
+        if (Platform.OS === 'web') {
+          if (typeof window !== 'undefined' && window.confirm('Your email address is not verified. Would you like to open the verification screen now?')) {
+            navigation.navigate('VerifyEmail', { email: normalizedEmail });
+          }
+        } else {
+          Alert.alert(
+            'Email Not Verified',
+            'Please verify your email before logging in.',
+            [
+              {
+                text: 'Verify Now',
+                onPress: () => navigation.navigate('VerifyEmail', { email: normalizedEmail }),
+              },
+              {
+                text: 'Resend & Verify',
+                onPress: () => handleResendVerification(true),
+              },
+              { text: 'Cancel', style: 'cancel' },
+            ]
+          );
+        }
       }
     } finally {
       setLoading(false);
@@ -90,7 +91,7 @@ export function LoginScreen() {
 
   const handleResendVerification = async (openVerification = false) => {
     if (!email) {
-      Alert.alert('Error', 'Please enter your email address first');
+      setErrorMessage('Please enter your email address first.');
       return;
     }
 
@@ -98,22 +99,31 @@ export function LoginScreen() {
     try {
       await resendVerification(email);
       
-      Alert.alert(
-        'Verification Email Sent',
-        'A new verification link has been sent to your email. Please check your inbox and spam folder.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              if (openVerification) {
-                navigation.navigate('VerifyEmail', { email: email.trim() });
-              }
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') {
+          window.alert('A new verification code has been sent to your email.');
+        }
+        if (openVerification) {
+          navigation.navigate('VerifyEmail', { email: email.trim() });
+        }
+      } else {
+        Alert.alert(
+          'Verification Email Sent',
+          'A new verification link has been sent to your email.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                if (openVerification) {
+                  navigation.navigate('VerifyEmail', { email: email.trim() });
+                }
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to resend verification email');
+      setErrorMessage(error.message || 'Failed to resend verification email.');
     } finally {
       setResendLoading(false);
     }
@@ -123,20 +133,26 @@ export function LoginScreen() {
     const trimmedEmail = email.trim();
 
     if (!trimmedEmail) {
-      Alert.alert('Email required', 'Please enter your email address first.');
+      setErrorMessage('Please enter your email address first to reset your password.');
       return;
     }
 
     setResetLoading(true);
     try {
       await forgotPassword(trimmedEmail);
-      Alert.alert(
-        'Reset link sent',
-        'A password reset link has been sent to your email. Please check your inbox and spam folder.',
-        [{ text: 'OK' }]
-      );
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') {
+          window.alert('A password reset link has been sent to your email.');
+        }
+      } else {
+        Alert.alert(
+          'Reset link sent',
+          'A password reset link has been sent to your email.',
+          [{ text: 'OK' }]
+        );
+      }
     } catch (error: any) {
-      Alert.alert('Reset failed', error.message || 'Could not send a password reset link right now.');
+      setErrorMessage(error.message || 'Could not send a password reset link right now.');
     } finally {
       setResetLoading(false);
     }
@@ -168,17 +184,25 @@ export function LoginScreen() {
             </View>
 
             <View style={[styles.form, isSmallDevice ? styles.formSmall : styles.formLarge]}>
+              {errorMessage ? (
+                <View style={styles.errorBanner}>
+                  <Ionicons name="alert-circle-outline" size={18} color="#ef4444" />
+                  <Text style={styles.errorBannerText}>{errorMessage}</Text>
+                </View>
+              ) : null}
+
               <View style={[styles.inputContainer, isSmallDevice && styles.inputContainerSmall]}>
                 <Ionicons name="mail-outline" size={18} color="#9ca3af" />
                 <TextInput
                   style={[styles.input, isSmallDevice && styles.inputSmall]}
                   placeholder="Email"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(text) => { setEmail(text); setErrorMessage(''); }}
                   autoCapitalize="none"
                   keyboardType="email-address"
                   editable={!loading}
                   placeholderTextColor="#9ca3af"
+                  returnKeyType="next"
                 />
               </View>
 
@@ -188,10 +212,12 @@ export function LoginScreen() {
                   style={[styles.input, { flex: 1 }, isSmallDevice && styles.inputSmall]}
                   placeholder="Password"
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(text) => { setPassword(text); setErrorMessage(''); }}
                   secureTextEntry={!showPassword}
                   editable={!loading}
                   placeholderTextColor="#9ca3af"
+                  returnKeyType="go"
+                  onSubmitEditing={handleLogin}
                 />
                 <TouchableOpacity 
                   onPress={() => setShowPassword(!showPassword)}
@@ -298,137 +324,133 @@ const styles = StyleSheet.create({
   },
   cardLarge: {
     width: '90%',
-    maxWidth: 500,
-    padding: 28,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
-  },
-  headerSmall: {
     marginBottom: 20,
   },
+  headerSmall: {
+    marginBottom: 14,
+  },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: '#6366f1',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  iconContainerLarge: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-  },
-  iconContainerSmall: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
     marginBottom: 12,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#111827',
+  iconContainerSmall: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     marginBottom: 8,
   },
-  titleSmall: {
+  iconContainerLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+  },
+  title: {
     fontSize: 24,
-    marginBottom: 6,
+    fontWeight: 'bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  titleSmall: {
+    fontSize: 20,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#6b7280',
     textAlign: 'center',
   },
   subtitleSmall: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 12,
   },
   form: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  formLarge: {
-    padding: 22,
+    gap: 14,
   },
   formSmall: {
-    padding: 16,
+    gap: 10,
+  },
+  formLarge: {
+    gap: 16,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: '#dc2626',
+    fontSize: 13,
+    lineHeight: 18,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    marginBottom: 16,
+    borderRadius: 8,
+    paddingHorizontal: 12,
     backgroundColor: '#f9fafb',
-    minHeight: 52,
+    gap: 8,
   },
   inputContainerSmall: {
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    minHeight: 48,
+    paddingHorizontal: 10,
   },
   input: {
     flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    fontSize: 16,
+    paddingVertical: 12,
+    fontSize: 15,
     color: '#111827',
   },
   inputSmall: {
-    paddingVertical: 12,
-    fontSize: 15,
+    paddingVertical: 9,
+    fontSize: 14,
   },
   forgotPassword: {
-    alignItems: 'flex-end',
-    marginBottom: 24,
+    alignSelf: 'flex-end',
   },
   forgotPasswordSmall: {
-    marginBottom: 18,
+    marginTop: -2,
   },
   forgotPasswordText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6366f1',
     fontWeight: '500',
   },
   forgotPasswordTextSmall: {
-    fontSize: 13,
+    fontSize: 12,
   },
   loginButton: {
-    marginBottom: 12,
+    marginTop: 4,
   },
   resendLoadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    marginBottom: 8,
+    gap: 8,
+    marginTop: 4,
   },
   resendLoadingText: {
-    marginLeft: 10,
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 12,
+    color: '#6366f1',
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 16,
+    marginVertical: 6,
   },
   divider: {
     flex: 1,
@@ -436,43 +458,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
   },
   dividerText: {
-    marginHorizontal: 16,
+    paddingHorizontal: 12,
+    fontSize: 12,
     color: '#9ca3af',
-    fontSize: 14,
-  },
-  quickRegisterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
-    marginBottom: 16,
-  },
-  quickRegisterText: {
-    marginLeft: 8,
-    fontSize: 16,
-    color: '#6366f1',
-    fontWeight: '500',
   },
   registerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    paddingTop: 4,
   },
   registerContainerSmall: {
-    gap: 2,
+    marginTop: 2,
   },
   registerText: {
     fontSize: 14,
     color: '#6b7280',
   },
   registerTextSmall: {
-    fontSize: 13,
+    fontSize: 12,
   },
   registerLink: {
     fontSize: 14,
@@ -480,6 +482,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   registerLinkSmall: {
-    fontSize: 13,
+    fontSize: 12,
   },
 });

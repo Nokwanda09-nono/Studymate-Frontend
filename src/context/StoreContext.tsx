@@ -4,12 +4,14 @@ import React, {
     createContext,
     useContext,
     useEffect,
+    useRef,
     useState,
 } from "react";
 
 import {
     Assessment,
     AttendanceRecord,
+    AppState,
     FileItem,
     Module,
     ScheduleItem,
@@ -20,8 +22,10 @@ import {
 import {
     deleteFileFromDatabase,
     fetchUserFiles,
+    isSupportedStudyFile,
     uploadFileToDatabase,
 } from "../lib/fileApi";
+import { fetchAppState, saveAppState } from "../lib/appStateApi";
 import { useAuth } from "./AuthContext";
 
 interface StoreContextType {
@@ -30,6 +34,7 @@ interface StoreContextType {
   files: FileItem[];
   schedule: ScheduleItem[];
   attendance: AttendanceRecord[];
+  settings: Record<string, unknown>;
   user: User | null;
   profile: UserProfile | null;
 
@@ -55,6 +60,7 @@ interface StoreContextType {
 
   setUser: (user: User) => void;
   setProfile: (profile: UserProfile) => void;
+  setSettings: (settings: Record<string, unknown>) => void;
 
   clearAllData: () => void;
 }
@@ -62,6 +68,50 @@ interface StoreContextType {
 const StoreContext = createContext<
   StoreContextType | undefined
 >(undefined);
+
+const mergeRecords = <T extends { id: string }>(
+  localRecords: T[],
+  remoteRecords: T[],
+): T[] => {
+  const records = new Map(localRecords.map((record) => [record.id, record]));
+  remoteRecords.forEach((record) => {
+    records.set(record.id, { ...records.get(record.id), ...record });
+  });
+  return [...records.values()];
+};
+
+const mergeAppState = (local: AppState, remote: AppState): AppState => {
+  const deleted: AppState["deleted"] = {
+    modules: [...new Set([...local.deleted.modules, ...remote.deleted.modules])],
+    assessments: [
+      ...new Set([...local.deleted.assessments, ...remote.deleted.assessments]),
+    ],
+    schedule: [...new Set([...local.deleted.schedule, ...remote.deleted.schedule])],
+    attendance: [
+      ...new Set([...local.deleted.attendance, ...remote.deleted.attendance]),
+    ],
+  };
+
+  return {
+    modules: mergeRecords(local.modules, remote.modules).filter(
+      (record) => !deleted.modules.includes(record.id),
+    ),
+    assessments: mergeRecords(local.assessments, remote.assessments).filter(
+      (record) => !deleted.assessments.includes(record.id),
+    ),
+    schedule: mergeRecords(local.schedule, remote.schedule).filter(
+      (record) => !deleted.schedule.includes(record.id),
+    ),
+    attendance: mergeRecords(local.attendance, remote.attendance).filter(
+      (record) => !deleted.attendance.includes(record.id),
+    ),
+    deleted,
+    profile: local.profile || remote.profile
+      ? { ...local.profile, ...remote.profile }
+      : null,
+    settings: { ...local.settings, ...remote.settings },
+  };
+};
 
 export const StoreProvider: React.FC<{
   children: React.ReactNode;
@@ -74,10 +124,26 @@ export const StoreProvider: React.FC<{
   const [attendance, setAttendance] = useState<
     AttendanceRecord[]
   >([]);
+  const [settings, setSettingsState] = useState<Record<string, unknown>>({});
 
   const [user, setUserState] = useState<User | null>(null);
   const [profile, setProfileState] =
     useState<UserProfile | null>(null);
+  const syncQueue = useRef<Promise<void>>(Promise.resolve());
+
+  const queueAppStateSync = () => {
+    const state = store.getAppState();
+    const queuedSync = syncQueue.current
+      .catch((error) => {
+        console.error("Previous StudyMate data sync failed:", error);
+      })
+      .then(() => saveAppState(state));
+
+    syncQueue.current = queuedSync;
+    void queuedSync.catch((error) => {
+      console.error("Could not sync StudyMate data to the server:", error);
+    });
+  };
 
   /*
    * ----------------------------------------------------------
@@ -104,6 +170,7 @@ export const StoreProvider: React.FC<{
           setFiles([]);
           setSchedule([]);
           setAttendance([]);
+          setSettingsState({});
           setUserState(null);
           setProfileState(null);
           return;
@@ -121,6 +188,25 @@ export const StoreProvider: React.FC<{
           return;
         }
 
+        let remoteSyncAvailable = false;
+        try {
+          const localState = store.getAppState();
+          const remoteState = await fetchAppState();
+          const mergedState = remoteState
+            ? mergeAppState(localState, remoteState)
+            : localState;
+
+          if (!mounted) {
+            return;
+          }
+
+          store.replaceAppState(mergedState);
+          await saveAppState(mergedState);
+          remoteSyncAvailable = true;
+        } catch (syncError) {
+          console.error("Could not load or sync StudyMate data:", syncError);
+        }
+
         const loadedProfile = store.getProfile();
         const initializedProfile = loadedProfile
           ? store.initializeStudyPoints(loadedProfile)
@@ -130,6 +216,13 @@ export const StoreProvider: React.FC<{
           store.setProfile(initializedProfile);
         }
         store.evaluateMissedSessions();
+        if (remoteSyncAvailable) {
+          try {
+            await saveAppState(store.getAppState());
+          } catch (syncError) {
+            console.error("Could not save updated StudyMate data:", syncError);
+          }
+        }
 
         try {
           for (const remoteId of store.getPendingRemoteFileDeletions()) {
@@ -171,7 +264,11 @@ export const StoreProvider: React.FC<{
           });
 
           for (const file of store.getFiles()) {
-            if (file.remoteId || !file.uri) {
+            if (
+              file.remoteId ||
+              !file.uri ||
+              !isSupportedStudyFile(file.name)
+            ) {
               continue;
             }
             try {
@@ -223,6 +320,7 @@ export const StoreProvider: React.FC<{
         setFiles(store.getFiles());
         setSchedule(store.getSchedule());
         setAttendance(store.getAttendance());
+        setSettingsState(store.getSettings());
 
         setUserState(store.getUser());
         setProfileState(store.getProfile());
@@ -251,6 +349,7 @@ export const StoreProvider: React.FC<{
     store.addModule(module);
 
     setModules(store.getModules());
+    queueAppStateSync();
   };
 
   const deleteModule = (id: string) => {
@@ -263,6 +362,7 @@ export const StoreProvider: React.FC<{
     setModules(store.getModules());
     setFiles(store.getFiles());
     setAssessments(store.getAssessments());
+    queueAppStateSync();
   };
 
   /*
@@ -275,6 +375,7 @@ export const StoreProvider: React.FC<{
     store.addAssessment(assessment);
 
     setAssessments(store.getAssessments());
+    queueAppStateSync();
   };
 
   const updateAssessment = (
@@ -284,6 +385,7 @@ export const StoreProvider: React.FC<{
     store.updateAssessment(id, updates);
 
     setAssessments(store.getAssessments());
+    queueAppStateSync();
   };
 
   /*
@@ -338,12 +440,14 @@ export const StoreProvider: React.FC<{
     store.addScheduleItem(item);
 
     setSchedule(store.getSchedule());
+    queueAppStateSync();
   };
 
   const deleteScheduleItem = (id: string) => {
     store.deleteScheduleItem(id);
 
     setSchedule(store.getSchedule());
+    queueAppStateSync();
   };
 
   /*
@@ -357,6 +461,7 @@ export const StoreProvider: React.FC<{
 
     setAttendance(store.getAttendance());
     setProfileState(store.getProfile());
+    queueAppStateSync();
   };
 
   /*
@@ -382,6 +487,13 @@ export const StoreProvider: React.FC<{
     store.setProfile(initializedProfile);
 
     setProfileState(initializedProfile);
+    queueAppStateSync();
+  };
+
+  const setSettings = (newSettings: Record<string, unknown>) => {
+    store.setSettings(newSettings);
+    setSettingsState(store.getSettings());
+    queueAppStateSync();
   };
 
   /*
@@ -404,6 +516,7 @@ export const StoreProvider: React.FC<{
     setFiles([]);
     setSchedule([]);
     setAttendance([]);
+    setSettingsState({});
 
     setUserState(null);
     setProfileState(null);
@@ -423,6 +536,7 @@ export const StoreProvider: React.FC<{
         files,
         schedule,
         attendance,
+        settings,
 
         user,
         profile,
@@ -446,6 +560,7 @@ export const StoreProvider: React.FC<{
 
         setUser,
         setProfile,
+        setSettings,
 
         clearAllData,
       }}

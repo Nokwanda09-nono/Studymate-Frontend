@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { useState } from "react";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { useEffect, useState } from "react";
 import {
     Alert,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -14,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../components/ButtomNav";
 import { CustomCard } from "../components/CustomCard";
+import { WebLayout } from "../components/WebLayout";
 import { useStore } from "../context/StoreContext";
 import { generateModuleQuiz } from "../lib/quizApi";
 import { Assessment } from "../lib/store";
@@ -31,7 +33,8 @@ const COLORS = [
 ];
 
 export function ScheduleScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const route = useRoute();
   const {
     modules,
     schedule,
@@ -62,10 +65,28 @@ export function ScheduleScreen() {
   // Assessment Modal States
   const [assessmentModalVisible, setAssessmentModalVisible] = useState(false);
   const [selectedModule, setSelectedModule] = useState("");
-  const [selectedType, setSelectedType] = useState<
-    "quiz" | "test" | "mock_exam"
-  >("quiz");
   const [generatingAssessment, setGeneratingAssessment] = useState(false);
+
+  // Custom Quiz Generation Options (Min 10, Max 20)
+  const [selectedQuestionType, setSelectedQuestionType] = useState<"mcq_only" | "combination" | "open_ended_only">("mcq_only");
+  const [selectedDifficulty, setSelectedDifficulty] = useState<"low" | "medium" | "high">("medium");
+  const [questionCount, setQuestionCount] = useState<number>(10);
+
+  useEffect(() => {
+    const params = (route.params as any) || {};
+    if (params.tab === "assessments" || params.generate) {
+      const timer = setTimeout(() => {
+        setActiveTab("assessments");
+        if (params.generate) {
+          if (params.moduleId) {
+            setSelectedModule(params.moduleId);
+          }
+          setAssessmentModalVisible(true);
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [route.params]);
 
   // Calculate study performance
   const getStudyPerformance = () => {
@@ -166,14 +187,20 @@ export function ScheduleScreen() {
   };
 
   const handleDeleteSchedule = (id: string, title: string) => {
-    Alert.alert("Delete Class", `Are you sure you want to delete "${title}"?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => deleteScheduleItem(id),
-      },
-    ]);
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm(`Are you sure you want to delete "${title}"?`)) {
+        deleteScheduleItem(id);
+      }
+    } else {
+      Alert.alert("Delete Class", `Are you sure you want to delete "${title}"?`, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteScheduleItem(id),
+        },
+      ]);
+    }
   };
 
   // Check if a time slot has a class
@@ -184,27 +211,39 @@ export function ScheduleScreen() {
 
   const handleGenerateAssessment = async () => {
     if (!selectedModule) {
-      Alert.alert("Error", "Please select a module");
+      if (Platform.OS === "web") {
+        if (typeof window !== "undefined") window.alert("Please select a module first.");
+      } else {
+        Alert.alert("Error", "Please select a module");
+      }
       return;
     }
 
     const module = modules.find((m) => m.id === selectedModule);
     if (!module) return;
 
-    const questionCounts = {
-      quiz: 10,
-      test: 25,
-      mock_exam: 50,
-    };
+    const finalCount = Math.min(Math.max(questionCount, 10), 20);
 
     setGeneratingAssessment(true);
     try {
-      const questions = await generateModuleQuiz(selectedModule, module.name, questionCounts[selectedType]);
+      const questions = await generateModuleQuiz(selectedModule, module.name, {
+        questionCount: finalCount,
+        questionType: selectedQuestionType,
+        difficulty: selectedDifficulty,
+      });
+
+      const typeLabel =
+        selectedQuestionType === "mcq_only"
+          ? "Multiple Choice"
+          : selectedQuestionType === "open_ended_only"
+            ? "Open Ended"
+            : "Combination";
+
       const assessmentItem: Assessment = {
         id: Date.now().toString(),
         moduleId: selectedModule,
-        type: selectedType,
-        title: `${module.name} ${selectedType.replace("_", " ").toUpperCase()}`,
+        type: "quiz",
+        title: `${module.name} ${typeLabel} Quiz (${selectedDifficulty.toUpperCase()})`,
         questionCount: questions.length,
         completed: false,
         score: 0,
@@ -213,9 +252,19 @@ export function ScheduleScreen() {
 
       addAssessment(assessmentItem);
       setAssessmentModalVisible(false);
-      Alert.alert("Success", "Quiz generated from your uploaded module content.");
+
+      if (Platform.OS === "web") {
+        if (typeof window !== "undefined") window.alert("Quiz generated successfully!");
+      } else {
+        Alert.alert("Success", "Quiz generated from your uploaded module content.");
+      }
     } catch (error) {
-      Alert.alert("Quiz generation failed", error instanceof Error ? error.message : "Please upload readable study content first.");
+      const errMsg = error instanceof Error ? error.message : "Please upload readable study content first.";
+      if (Platform.OS === "web") {
+        if (typeof window !== "undefined") window.alert(`Quiz generation failed: ${errMsg}`);
+      } else {
+        Alert.alert("Quiz generation failed", errMsg);
+      }
     } finally {
       setGeneratingAssessment(false);
     }
@@ -441,8 +490,243 @@ export function ScheduleScreen() {
     </>
   );
 
+  if (Platform.OS === "web") {
+    return (
+      <WebLayout>
+        <ScrollView style={styles.webScheduleScroll} contentContainerStyle={styles.webScheduleContent} showsVerticalScrollIndicator={false}>
+          {/* TOP HEADER & ACTION BAR */}
+          <View style={styles.webScheduleHeaderRow}>
+            <View>
+              <Text style={styles.webScheduleTitle}>Schedule & Timetable</Text>
+              <Text style={styles.webScheduleSubtitle}>Organize your weekly study sessions and track AI assessments</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.webAddClassBtn}
+              onPress={() => {
+                setEditingItem(null);
+                setNewTimetableItem({
+                  title: "",
+                  moduleId: "",
+                  selectedDays: [0],
+                  startTime: "08:00",
+                  endTime: "10:00",
+                  color: COLORS[0],
+                });
+                setTimetableModalVisible(true);
+              }}
+            >
+              <Ionicons name="add-circle" size={18} color="white" />
+              <Text style={styles.webAddClassText}>Add to Timetable</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* METRICS ROW */}
+          <View style={styles.webMetricsRow}>
+            <View style={styles.webMetricCard}>
+              <View style={styles.webMetricIconBox}>
+                <Ionicons name="trending-up" size={20} color="#10b981" />
+              </View>
+              <View>
+                <Text style={styles.webMetricLabel}>Study Performance</Text>
+                <Text style={styles.webMetricValue}>{getStudyPerformance()}%</Text>
+              </View>
+            </View>
+
+            <View style={styles.webMetricCard}>
+              <View style={styles.webMetricIconBox}>
+                <Ionicons name="calendar-outline" size={20} color="#6366f1" />
+              </View>
+              <View>
+                <Text style={styles.webMetricLabel}>Sessions this Month</Text>
+                <Text style={styles.webMetricValue}>{getStudySessionsThisMonth()}</Text>
+              </View>
+            </View>
+
+            <View style={styles.webMetricCard}>
+              <View style={styles.webMetricIconBox}>
+                <Ionicons name="ribbon-outline" size={20} color="#f59e0b" />
+              </View>
+              <View>
+                <Text style={styles.webMetricLabel}>Completed Assessments</Text>
+                <Text style={styles.webMetricValue}>{assessments.filter((a) => a.completed).length}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* TAB SWITCHER */}
+          <View style={styles.webTabSwitcherRow}>
+            <TouchableOpacity
+              style={[styles.webTabBtn, activeTab === "timetable" && styles.webTabBtnActive]}
+              onPress={() => setActiveTab("timetable")}
+            >
+              <Ionicons name="calendar" size={17} color={activeTab === "timetable" ? "#6366f1" : "#64748b"} />
+              <Text style={[styles.webTabBtnText, activeTab === "timetable" && styles.webTabBtnTextActive]}>Weekly Timetable Grid</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.webTabBtn, activeTab === "assessments" && styles.webTabBtnActive]}
+              onPress={() => setActiveTab("assessments")}
+            >
+              <Ionicons name="clipboard" size={17} color={activeTab === "assessments" ? "#6366f1" : "#64748b"} />
+              <Text style={[styles.webTabBtnText, activeTab === "assessments" && styles.webTabBtnTextActive]}>Assessments & Quizzes</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* WEEKLY MATRIX GRID */}
+          {activeTab === "timetable" ? (
+            <View style={styles.webGridCard}>
+              <View style={styles.webGridHeaderRow}>
+                <View style={styles.webTimeHeaderCol}>
+                  <Text style={styles.webGridHeaderDayText}>TIME</Text>
+                </View>
+                {DAYS.map((day) => (
+                  <View key={day} style={styles.webGridDayHeaderCol}>
+                    <Text style={styles.webGridHeaderDayText}>{day.toUpperCase()}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.webGridBody}>
+                {HOURS.map((hour) => (
+                  <View key={hour} style={styles.webGridRow}>
+                    <View style={styles.webTimeCol}>
+                      <Text style={styles.webTimeColText}>{hour}</Text>
+                    </View>
+
+                    {DAYS.map((day, dayIndex) => {
+                      const classItem = getClassForTimeSlot(dayIndex, hour);
+                      return (
+                        <TouchableOpacity
+                          key={`${dayIndex}-${hour}`}
+                          style={[styles.webGridSlot, classItem && { backgroundColor: `${classItem.color}15` }]}
+                          onPress={() => {
+                            if (classItem) {
+                              handleEditSchedule(classItem);
+                            } else {
+                              setEditingItem(null);
+                              setNewTimetableItem({
+                                title: "",
+                                moduleId: "",
+                                selectedDays: [dayIndex],
+                                startTime: hour,
+                                endTime: `${String(parseInt(hour.split(":")[0]) + 1).padStart(2, "0")}:00`,
+                                color: COLORS[0],
+                              });
+                              setTimetableModalVisible(true);
+                            }
+                          }}
+                        >
+                          {classItem ? (
+                            <View style={[styles.webClassCardBlock, { borderLeftColor: classItem.color }]}>
+                              <Text style={styles.webClassTitleText} numberOfLines={1}>{classItem.title}</Text>
+                              <Text style={styles.webClassModuleText} numberOfLines={1}>{getModuleName(classItem.moduleId)}</Text>
+                              <Text style={styles.webClassTimeText}>{classItem.startTime} - {classItem.endTime}</Text>
+                            </View>
+                          ) : (
+                            <View style={styles.webEmptySlotHover}>
+                              <Ionicons name="add-outline" size={14} color="#cbd5e1" />
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.webAssessmentsGrid}>
+              {assessments.length === 0 ? (
+                <View style={styles.webEmptyStateCard}>
+                  <Ionicons name="clipboard-outline" size={48} color="#94a3b8" />
+                  <Text style={styles.webEmptyStateTitle}>No Assessments Yet</Text>
+                  <Text style={styles.webEmptyStateSub}>Quizzes generated from your study modules will appear here.</Text>
+                </View>
+              ) : (
+                assessments.map((a) => (
+                  <View key={a.id} style={styles.webAssessmentCard}>
+                    <View style={styles.webAssessmentHeader}>
+                      <Text style={styles.webAssessmentTitle}>{a.title}</Text>
+                      <View style={[styles.webScoreBadge, { backgroundColor: a.completed ? "#dcfce7" : "#fef3c7" }]}>
+                        <Text style={[styles.webScoreText, { color: a.completed ? "#166534" : "#92400e" }]}>
+                          {a.completed ? `${a.score || 0}%` : "Pending"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.webAssessmentMeta}>{a.questionCount || a.questions?.length || 10} Questions • {getModuleName(a.moduleId)}</Text>
+                    <TouchableOpacity
+                      style={styles.webStartQuizBtn}
+                      onPress={() => navigation.navigate("Quiz", { id: a.id })}
+                    >
+                      <Text style={styles.webStartQuizText}>{a.completed ? "Review Assessment" : "Start Quiz"}</Text>
+                      <Ionicons name="arrow-forward" size={14} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
+          {/* Timetable Modal */}
+          <Modal
+            visible={timetableModalVisible}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setTimetableModalVisible(false)}
+          >
+            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setTimetableModalVisible(false)}>
+              <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{editingItem ? "Edit Class" : "Add to Timetable"}</Text>
+                  <TouchableOpacity onPress={() => setTimetableModalVisible(false)}>
+                    <Ionicons name="close" size={24} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={styles.modalBody}>
+                  <Text style={styles.modalLabel}>Class / Subject Name *</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. Data Structures Lecture"
+                    value={editingItem ? editingItem.title : newTimetableItem.title}
+                    onChangeText={(text) =>
+                      editingItem ? setEditingItem({ ...editingItem, title: text }) : setNewTimetableItem({ ...newTimetableItem, title: text })
+                    }
+                  />
+
+                  <Text style={styles.modalLabel}>Module *</Text>
+                  <View style={styles.moduleList}>
+                    {modules.map((m) => {
+                      const isSelected = (editingItem ? editingItem.moduleId : newTimetableItem.moduleId) === m.id;
+                      return (
+                        <TouchableOpacity
+                          key={m.id}
+                          style={[styles.moduleOption, isSelected && styles.moduleOptionSelected]}
+                          onPress={() => (editingItem ? setEditingItem({ ...editingItem, moduleId: m.id }) : setNewTimetableItem({ ...newTimetableItem, moduleId: m.id }))}
+                        >
+                          <View style={[styles.moduleColorDot, { backgroundColor: m.color || "#6366f1" }]} />
+                          <Text style={styles.moduleOptionText}>{m.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <TouchableOpacity style={styles.saveButton} onPress={handleAddSchedule}>
+                    <Text style={styles.saveButtonText}>{editingItem ? "Update Class" : "Save Class"}</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        </ScrollView>
+      </WebLayout>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <WebLayout>
+      <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Schedule</Text>
         <Text style={styles.headerSubtitle}>
@@ -680,8 +964,8 @@ export function ScheduleScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.modalBody}>
-              <Text style={styles.modalLabel}>Select Module</Text>
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.modalLabel}>Select Module *</Text>
               <View style={styles.moduleList}>
                 {modules.map((module) => (
                   <TouchableOpacity
@@ -696,7 +980,7 @@ export function ScheduleScreen() {
                     <View
                       style={[
                         styles.moduleColorDot,
-                        { backgroundColor: module.color },
+                        { backgroundColor: module.color || "#6366f1" },
                       ]}
                     />
                     <Text style={styles.moduleOptionText}>{module.name}</Text>
@@ -704,30 +988,78 @@ export function ScheduleScreen() {
                 ))}
               </View>
 
-              <Text style={styles.modalLabel}>Assessment Type</Text>
-              {(["quiz", "test", "mock_exam"] as const).map((type) => (
+              <Text style={styles.modalLabel}>Question Types *</Text>
+              {[
+                { id: "mcq_only", label: "Multiple Choice Questions Only" },
+                { id: "combination", label: "Combination (MCQ & Open-Ended)" },
+                { id: "open_ended_only", label: "Open-Ended Questions Only" },
+              ].map((opt) => (
                 <TouchableOpacity
-                  key={type}
+                  key={opt.id}
                   style={[
                     styles.typeOption,
-                    selectedType === type && styles.typeOptionSelected,
+                    selectedQuestionType === opt.id && styles.typeOptionSelected,
                   ]}
-                  onPress={() => setSelectedType(type)}
+                  onPress={() => setSelectedQuestionType(opt.id as any)}
                 >
                   <Text
                     style={[
                       styles.typeOptionText,
-                      selectedType === type && styles.typeOptionTextSelected,
+                      selectedQuestionType === opt.id && styles.typeOptionTextSelected,
                     ]}
                   >
-                    {type === "quiz"
-                      ? "Quiz (10 questions)"
-                      : type === "test"
-                        ? "Test (25 questions)"
-                        : "Mock Exam (50 questions)"}
+                    {opt.label}
                   </Text>
                 </TouchableOpacity>
               ))}
+
+              <Text style={styles.modalLabel}>Level of Difficulty *</Text>
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+                {[
+                  { id: "low", label: "Low (Easy)" },
+                  { id: "medium", label: "Medium" },
+                  { id: "high", label: "High (Challenging)" },
+                ].map((diff) => (
+                  <TouchableOpacity
+                    key={diff.id}
+                    style={[
+                      styles.typeOption,
+                      { flex: 1, marginBottom: 0, alignItems: "center" },
+                      selectedDifficulty === diff.id && styles.typeOptionSelected,
+                    ]}
+                    onPress={() => setSelectedDifficulty(diff.id as any)}
+                  >
+                    <Text
+                      style={[
+                        styles.typeOptionText,
+                        selectedDifficulty === diff.id && styles.typeOptionTextSelected,
+                      ]}
+                    >
+                      {diff.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.modalLabel}>Number of Questions (10 - 20) *</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                <TouchableOpacity
+                  style={[styles.webSlideNavBtn, { width: 36, height: 36, alignItems: "center", justifyContent: "center" }]}
+                  onPress={() => setQuestionCount(Math.max(10, questionCount - 1))}
+                >
+                  <Ionicons name="remove" size={18} color="#0f172a" />
+                </TouchableOpacity>
+                <Text style={{ fontSize: 18, fontWeight: "700", color: "#0f172a", minWidth: 40, textAlign: "center" }}>
+                  {questionCount}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.webSlideNavBtn, { width: 36, height: 36, alignItems: "center", justifyContent: "center" }]}
+                  onPress={() => setQuestionCount(Math.min(20, questionCount + 1))}
+                >
+                  <Ionicons name="add" size={18} color="#0f172a" />
+                </TouchableOpacity>
+                <Text style={{ fontSize: 12, color: "#64748b" }}>(Min: 10, Max: 20)</Text>
+              </View>
 
               <TouchableOpacity
                 style={[
@@ -735,19 +1067,20 @@ export function ScheduleScreen() {
                   (!selectedModule || generatingAssessment) && styles.saveButtonDisabled,
                 ]}
                 onPress={handleGenerateAssessment}
-                  disabled={!selectedModule || generatingAssessment}
+                disabled={!selectedModule || generatingAssessment}
               >
                 <Text style={styles.saveButtonText}>
-                  {generatingAssessment ? "Reading module files..." : "Generate Assessment"}
+                  {generatingAssessment ? "Generating Quiz with AI..." : "Generate Quiz"}
                 </Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
 
       <BottomNav />
     </SafeAreaView>
+  </WebLayout>
   );
 }
 
@@ -755,8 +1088,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f3f4f6",
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
   },
   header: {
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 1200 : "100%",
+    alignSelf: "center",
     backgroundColor: "white",
     paddingHorizontal: 20,
     paddingTop: 16,
@@ -775,6 +1112,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   tabContainer: {
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 1200 : "100%",
+    alignSelf: "center",
     flexDirection: "row",
     backgroundColor: "white",
     paddingHorizontal: 20,
@@ -807,6 +1147,9 @@ const styles = StyleSheet.create({
     color: "#55d164ff",
   },
   scrollContent: {
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 1200 : "100%",
+    alignSelf: "center",
     padding: 16,
     paddingBottom: 0,
   },
@@ -1159,6 +1502,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 16,
   },
+  webSlideNavBtn: {
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: "#e2e8f0",
+  },
   noModulesText: {
     flex: 1,
     fontSize: 13,
@@ -1240,5 +1588,283 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+
+  // Web Schedule Matrix Styles
+  webScheduleScroll: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  webScheduleContent: {
+    padding: 24,
+    maxWidth: 1300,
+    width: "100%",
+    alignSelf: "center",
+    gap: 20,
+  },
+  webScheduleHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  webScheduleTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: -0.5,
+  },
+  webScheduleSubtitle: {
+    fontSize: 13,
+    color: "#64748b",
+    marginTop: 2,
+  },
+  webAddClassBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#6366f1",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    cursor: "pointer" as any,
+  },
+  webAddClassText: {
+    color: "white",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  webMetricsRow: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  webMetricCard: {
+    flex: 1,
+    backgroundColor: "white",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  webMetricIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  webMetricLabel: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  webMetricValue: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginTop: 2,
+  },
+  webTabSwitcherRow: {
+    flexDirection: "row",
+    backgroundColor: "white",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 4,
+    gap: 4,
+    alignSelf: "flex-start",
+  },
+  webTabBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    cursor: "pointer" as any,
+  },
+  webTabBtnActive: {
+    backgroundColor: "#eef2ff",
+  },
+  webTabBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  webTabBtnTextActive: {
+    color: "#6366f1",
+  },
+  webGridCard: {
+    backgroundColor: "white",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  webGridHeaderRow: {
+    flexDirection: "row",
+    backgroundColor: "#f8fafc",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  webTimeHeaderCol: {
+    width: 70,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRightWidth: 1,
+    borderRightColor: "#e2e8f0",
+  },
+  webGridDayHeaderCol: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRightWidth: 1,
+    borderRightColor: "#f1f5f9",
+  },
+  webGridHeaderDayText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#475569",
+    letterSpacing: 0.5,
+  },
+  webGridBody: {
+    display: "flex",
+    flexDirection: "column",
+  },
+  webGridRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    minHeight: 58,
+  },
+  webTimeCol: {
+    width: 70,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fafafa",
+    borderRightWidth: 1,
+    borderRightColor: "#e2e8f0",
+  },
+  webTimeColText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  webGridSlot: {
+    flex: 1,
+    borderRightWidth: 1,
+    borderRightColor: "#f1f5f9",
+    padding: 4,
+    cursor: "pointer" as any,
+  },
+  webClassCardBlock: {
+    flex: 1,
+    backgroundColor: "white",
+    borderRadius: 6,
+    borderLeftWidth: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+  },
+  webClassTitleText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  webClassModuleText: {
+    fontSize: 11,
+    color: "#64748b",
+  },
+  webClassTimeText: {
+    fontSize: 10,
+    color: "#94a3b8",
+    marginTop: 1,
+  },
+  webEmptySlotHover: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.3,
+  },
+  webAssessmentsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+  },
+  webEmptyStateCard: {
+    width: "100%",
+    backgroundColor: "white",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 40,
+    alignItems: "center",
+    gap: 10,
+  },
+  webEmptyStateTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  webEmptyStateSub: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+  webAssessmentCard: {
+    width: "48%",
+    minWidth: 320,
+    backgroundColor: "white",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 18,
+    gap: 12,
+  },
+  webAssessmentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  webAssessmentTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0f172a",
+    flex: 1,
+  },
+  webScoreBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  webScoreText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  webAssessmentMeta: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  webStartQuizBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#6366f1",
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 4,
+    cursor: "pointer" as any,
+  },
+  webStartQuizText: {
+    color: "white",
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

@@ -1,0 +1,4 @@
+env: load .env
+env: export BACKEND_URL EXPO_PUBLIC_API_URL EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK
+
+✨ No lint errors or warnings found!

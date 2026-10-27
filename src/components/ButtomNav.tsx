@@ -35,6 +35,10 @@ export function BottomNav() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute();
 
+  if (Platform.OS === "web") {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
       {navItems.map((item) => {
@@ -42,12 +46,15 @@ export function BottomNav() {
         return (
           <TouchableOpacity
             key={item.name}
-            style={styles.navItem}
+            style={[
+              styles.navItem,
+              isActive && styles.navItemActive,
+            ]}
             onPress={() => navigation.navigate(item.route)}
           >
             <Ionicons
-              name={item.icon as any} // Use 'as any' here
-              size={24}
+              name={(isActive ? item.icon.replace('-outline', '') : item.icon) as any}
+              size={22}
               color={isActive ? "#6366f1" : "#6b7280"}
             />
             <Text style={[styles.navText, isActive && styles.navTextActive]}>
@@ -67,25 +74,44 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#e5e7eb",
     paddingVertical: 8,
-    paddingBottom: Platform.OS === "web" ? 12 : 20,
+    paddingBottom: Platform.OS === "web" ? 10 : 20,
     paddingHorizontal: 8,
     justifyContent: "space-around",
     width: "100%",
-    maxWidth: Platform.OS === "web" ? 560 : "100%",
+    maxWidth: Platform.OS === "web" ? 640 : "100%",
     alignSelf: "center",
+  },
+  webContainer: {
+    borderTopWidth: 0,
+    borderRadius: 20,
+    marginVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
   navItem: {
     alignItems: "center",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  navItemActive: {
+    backgroundColor: Platform.OS === 'web' ? '#eef2ff' : 'transparent',
   },
   navText: {
     fontSize: 11,
     color: "#6b7280",
     marginTop: 2,
+    fontWeight: "500",
   },
   navTextActive: {
     color: "#6366f1",
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });

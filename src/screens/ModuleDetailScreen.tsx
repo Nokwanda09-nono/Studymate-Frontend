@@ -10,6 +10,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { useState } from "react";
 import {
   Alert,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -24,6 +25,7 @@ import { CustomCard } from "../components/CustomCard";
 import { useStore } from "../context/StoreContext";
 import {
   deleteFileFromDatabase,
+  isSupportedStudyFile,
   uploadFileToDatabase,
 } from "../lib/fileApi";
 import {
@@ -38,24 +40,9 @@ import type { RootStackParamList } from "../navigation/types";
 
 const DOCUMENT_TYPES = [
   "application/pdf",
-
-  // Images
-  "image/*",
-
-  // Text
-  "text/*",
-
-  // Microsoft Word
-  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-
-  // Microsoft PowerPoint
-  "application/vnd.ms-powerpoint",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-
-  // Microsoft Excel
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "image/*",
 ];
 
 // ---------------------------------------------------------
@@ -190,8 +177,15 @@ export function ModuleDetailScreen() {
 
         let uploadedCount = 0;
         let pendingSyncCount = 0;
+        const rejectedFiles: string[] = [];
 
         for (const file of selectedFiles) {
+          const fileName = file.name || "Untitled file";
+          if (!isSupportedStudyFile(fileName)) {
+            rejectedFiles.push(fileName);
+            continue;
+          }
+
           let permanentUri = "";
           let savedLocally = false;
           try {
@@ -202,8 +196,7 @@ export function ModuleDetailScreen() {
               await persistPickedFile({
                 uri: file.uri,
                 name:
-                  file.name ||
-                  "Untitled file",
+                  fileName,
               });
 
             /*
@@ -274,10 +267,24 @@ export function ModuleDetailScreen() {
 
         if (uploadedCount > 0) {
           Alert.alert(
-            pendingSyncCount > 0 ? "Files added on this device" : "Files uploaded",
-            pendingSyncCount > 0
-              ? `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} added to ${module.name}. They will sync when the server is available.`
-              : `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} successfully added to ${module.name}.`
+            rejectedFiles.length > 0
+              ? "Some files were skipped"
+              : pendingSyncCount > 0
+                ? "Files added on this device"
+                : "Files uploaded",
+            [
+              pendingSyncCount > 0
+                ? `${uploadedCount} supported file${uploadedCount === 1 ? "" : "s"} added to ${module.name}. They will sync when the server is available.`
+                : `${uploadedCount} supported file${uploadedCount === 1 ? "" : "s"} successfully added to ${module.name}.`,
+              rejectedFiles.length > 0
+                ? `Unsupported: ${rejectedFiles.join(", ")}. Choose PDF, PPTX, DOCX, or an image (JPG, PNG, GIF, WEBP, BMP, HEIC, TIFF, or AVIF).`
+                : "",
+            ].filter(Boolean).join("\n\n"),
+          );
+        } else if (rejectedFiles.length > 0) {
+          Alert.alert(
+            "Unsupported file type",
+            `${rejectedFiles.join(", ")} cannot be added. Choose PDF, PPTX, DOCX, or an image (JPG, PNG, GIF, WEBP, BMP, HEIC, TIFF, or AVIF).`,
           );
         } else {
           Alert.alert(
@@ -308,69 +315,75 @@ export function ModuleDetailScreen() {
     fileId: string,
     fileName: string
   ) => {
-    Alert.alert(
-      "Delete File",
-      `Are you sure you want to delete "${fileName}"?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+    const doDelete = async () => {
+      try {
+        const target = files.find(
+          (f) => f.id === fileId
+        );
+        let remoteDeletePending = false;
 
-        {
-          text: "Delete",
-          style: "destructive",
+        if (target?.remoteId) {
+          await queueRemoteFileDeletion(target.remoteId);
+        }
 
-          onPress: async () => {
-            try {
-              const target = files.find(
-                (f) => f.id === fileId
-              );
-              let remoteDeletePending = false;
+        if (target?.uri) {
+          await deletePersistedFile(target.uri);
+        }
+        deleteFile(fileId);
 
-              if (target?.remoteId) {
-                await queueRemoteFileDeletion(target.remoteId);
-              }
+        if (target?.remoteId) {
+          try {
+            await deleteFileFromDatabase(target.remoteId);
+            await clearQueuedRemoteFileDeletion(target.remoteId);
+          } catch (remoteDeleteError) {
+            remoteDeletePending = true;
+            console.warn(
+              `Could not delete remote file "${fileName}":`,
+              remoteDeleteError,
+            );
+          }
+        }
 
-              if (target?.uri) {
-                await deletePersistedFile(target.uri);
-              }
-              deleteFile(fileId);
+        if (remoteDeletePending && Platform.OS !== "web") {
+          Alert.alert(
+            "Deleted on this device",
+            "The file was deleted locally. Its server copy will be removed when the connection is available.",
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Delete file error:",
+          error
+        );
 
-              if (target?.remoteId) {
-                try {
-                  await deleteFileFromDatabase(target.remoteId);
-                  await clearQueuedRemoteFileDeletion(target.remoteId);
-                } catch (remoteDeleteError) {
-                  remoteDeletePending = true;
-                  console.warn(
-                    `Could not delete remote file "${fileName}":`,
-                    remoteDeleteError,
-                  );
-                }
-              }
+        Alert.alert(
+          "Error",
+          "The file could not be deleted."
+        );
+      }
+    };
 
-              if (remoteDeletePending) {
-                Alert.alert(
-                  "Deleted on this device",
-                  "The file was deleted locally. Its server copy will be removed when the connection is available.",
-                );
-              }
-            } catch (error) {
-              console.error(
-                "Delete file error:",
-                error
-              );
-
-              Alert.alert(
-                "Error",
-                "The file could not be deleted."
-              );
-            }
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm(`Are you sure you want to delete "${fileName}"?`)) {
+        doDelete();
+      }
+    } else {
+      Alert.alert(
+        "Delete File",
+        `Are you sure you want to delete "${fileName}"?`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
           },
-        },
-      ]
-    );
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: doDelete,
+          },
+        ]
+      );
+    }
   };
 
   // -------------------------------------------------------
@@ -571,14 +584,7 @@ export function ModuleDetailScreen() {
     name?: string;
     type?: string;
   }) => {
-    const isPdf = (file.type || "").toLowerCase().includes("pdf") ||
-      file.name?.toLowerCase().endsWith(".pdf");
-
-    if (isPdf) {
-      navigation.navigate("PDFViewer", { fileId: file.id });
-    } else {
-      navigation.navigate("FileViewer", { id: file.id });
-    }
+    navigation.navigate("FileViewer", { id: file.id });
   };
 
   // -------------------------------------------------------
@@ -885,9 +891,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f9fafb",
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
   },
 
   header: {
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 1000 : "100%",
+    alignSelf: "center",
     backgroundColor: "white",
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",

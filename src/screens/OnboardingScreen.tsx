@@ -1,6 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
 import {
@@ -16,8 +14,6 @@ import { CustomButton } from "../components/CustomButton";
 import { CustomCard } from "../components/CustomCard";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
-
-import { API_URL } from "../config/api";
 
 const TOTAL_STEPS = 12;
 
@@ -37,9 +33,8 @@ interface OnboardingProfile {
 }
 
 export function OnboardingScreen() {
-  const navigation = useNavigation();
   const { setProfile } = useStore();
-  const { saveOnboardingProfile, user, logout } = useAuth();
+  const { saveOnboardingProfile, logout } = useAuth();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [profile, setProfileState] = useState<OnboardingProfile>({
@@ -118,29 +113,6 @@ export function OnboardingScreen() {
       setIsSubmitting(false);
     }
   };
-
-  const debugDatabase = async () => {
-    try {
-      const token = await AsyncStorage.getItem('authToken');
-      if (!token) {
-        console.log('No token found');
-        return;
-      }
-      
-      const response = await fetch(`${API_URL}/debug-user`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      const data = await response.json();
-      console.log('Debug data:', data);
-    } catch (error) {
-      console.error('Debug error:', error);
-    }
-  };
-
-// Call this before submitting to check the database state
-// You can add a button or call it in useEffect
 
   const toggleChallenge = (challenge: string) => {
     const currentChallenges = profile.studyChallenges || [];

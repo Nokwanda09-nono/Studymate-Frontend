@@ -7,6 +7,7 @@ import { useState } from "react";
 import {
   Alert,
   FlatList,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,8 +22,9 @@ import { AnimatedModal } from "../components/AnimatedModal";
 import { BottomNav } from "../components/ButtomNav";
 import { CustomButton } from "../components/CustomButton";
 import { CustomCard } from "../components/CustomCard";
+import { WebLayout } from "../components/WebLayout";
 import { useStore } from "../context/StoreContext";
-import { uploadFileToDatabase } from "../lib/fileApi";
+import { isSupportedStudyFile, uploadFileToDatabase } from "../lib/fileApi";
 import { deletePersistedFile, persistPickedFile } from "../lib/fileStorage";
 import { Module } from "../lib/store";
 
@@ -61,24 +63,9 @@ const MODULE_COLORS = [
 // Supported study material types.
 const DOCUMENT_TYPES = [
   "application/pdf",
-
-  // Images
-  "image/*",
-
-  // Plain text
-  "text/*",
-
-  // Microsoft Word
-  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-
-  // Microsoft PowerPoint
-  "application/vnd.ms-powerpoint",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-
-  // Microsoft Excel
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "image/*",
 ];
 
 // ---------------------------------------------------------
@@ -204,8 +191,15 @@ export function ModulesScreen() {
 
       let uploadedCount = 0;
       let pendingSyncCount = 0;
+      const rejectedFiles: string[] = [];
 
       for (const file of selectedFiles) {
+        const fileName = file.name || "Untitled file";
+        if (!isSupportedStudyFile(fileName)) {
+          rejectedFiles.push(fileName);
+          continue;
+        }
+
         let permanentUri = "";
         let savedLocally = false;
         try {
@@ -216,8 +210,7 @@ export function ModulesScreen() {
             await persistPickedFile({
               uri: file.uri,
               name:
-                file.name ||
-                "Untitled file",
+                fileName,
             });
 
           /*
@@ -289,10 +282,24 @@ export function ModulesScreen() {
 
       if (uploadedCount > 0) {
         Alert.alert(
-          pendingSyncCount > 0 ? "Files added on this device" : "Upload successful",
-          pendingSyncCount > 0
-            ? `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} added to the module. They will sync when the server is available.`
-            : `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} added to the module.`
+          rejectedFiles.length > 0
+            ? "Some files were skipped"
+            : pendingSyncCount > 0
+              ? "Files added on this device"
+              : "Upload successful",
+          [
+            pendingSyncCount > 0
+              ? `${uploadedCount} supported file${uploadedCount === 1 ? "" : "s"} added to the module. They will sync when the server is available.`
+              : `${uploadedCount} supported file${uploadedCount === 1 ? "" : "s"} added to the module.`,
+            rejectedFiles.length > 0
+              ? `Unsupported: ${rejectedFiles.join(", ")}. Choose PDF, PPTX, DOCX, or an image (JPG, PNG, GIF, WEBP, BMP, HEIC, TIFF, or AVIF).`
+              : "",
+          ].filter(Boolean).join("\n\n"),
+        );
+      } else if (rejectedFiles.length > 0) {
+        Alert.alert(
+          "Unsupported file type",
+          `${rejectedFiles.join(", ")} cannot be added. Choose PDF, PPTX, DOCX, or an image (JPG, PNG, GIF, WEBP, BMP, HEIC, TIFF, or AVIF).`,
         );
       } else {
         Alert.alert(
@@ -417,10 +424,11 @@ export function ModulesScreen() {
   // -------------------------------------------------------
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      edges={["top"]}
-    >
+    <WebLayout>
+      <SafeAreaView
+        style={styles.container}
+        edges={["top"]}
+      >
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={
@@ -603,6 +611,7 @@ export function ModulesScreen() {
 
       <BottomNav />
     </SafeAreaView>
+  </WebLayout>
   );
 }
 
@@ -614,13 +623,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f9fafb",
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
   },
 
   scrollView: {
     flex: 1,
+    width: "100%",
   },
 
   scrollContent: {
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 1200 : "100%",
+    alignSelf: "center",
     paddingBottom: 100,
   },
 

@@ -1,8 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import {
-  NavigationProp,
   RouteProp,
-  useNavigation,
   useRoute,
 } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,6 +7,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -29,7 +27,6 @@ type RootStackParamList = {
 };
 
 export function VerifyEmailScreen() {
-  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, "VerifyEmail">>();
   const { verifyEmail, resendVerification } = useAuth();
 
@@ -52,7 +49,7 @@ export function VerifyEmailScreen() {
     setLoading(true);
 
     try {
-      const data = await verifyEmail(code, email);
+      await verifyEmail(code, email);
 
       Alert.alert(
         "Success 🎉", 
@@ -132,12 +129,17 @@ export function VerifyEmailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   card: {
     flex: 1,
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 520 : "100%",
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
+    alignSelf: "center",
   },
   title: {
     fontSize: 28,

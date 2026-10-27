@@ -20,12 +20,17 @@ export interface User {
 export interface UserProfile {
   studyHoursPerDay?: number | string;
   studyDaysPerWeek?: number | string;
+  studyHours?: number | string;
+  year?: string;
   academicGoal?: string;
   studyStyle?: string;
   fieldOfStudy?: string;
   academicLevel?: string;
   preferredStudyTime?: string;
   learningStyle?: string;
+  reminderFrequency?: string;
+  aiSupport?: string;
+  resourceRecommendations?: string;
   productiveTime?: string;
   qualification?: string;
   studyChallenges?: string[];
@@ -77,13 +82,18 @@ export interface Assessment {
   completed: boolean;
   score?: number;
   questions?: QuizQuestion[];
+  remoteOnly?: boolean;
 }
 
 export interface QuizQuestion {
   id: number;
   question: string;
-  options: string[];
-  correctAnswer: number;
+  options?: string[];
+  correctAnswer?: number;
+  type?: "mcq" | "open_ended";
+  sampleAnswer?: string;
+  explanation?: string;
+  userAnswer?: string;
 }
 
 export interface ScheduleItem {
@@ -105,12 +115,34 @@ export interface AttendanceRecord {
   pointsProcessed?: boolean;
 }
 
+export interface AppState {
+  modules: Module[];
+  assessments: Assessment[];
+  schedule: ScheduleItem[];
+  attendance: AttendanceRecord[];
+  deleted: {
+    modules: string[];
+    assessments: string[];
+    schedule: string[];
+    attendance: string[];
+  };
+  profile: UserProfile | null;
+  settings: Record<string, unknown>;
+}
+
 class Store {
   private modules: Module[] = [];
   private files: FileItem[] = [];
   private assessments: Assessment[] = [];
   private schedule: ScheduleItem[] = [];
   private attendance: AttendanceRecord[] = [];
+  private deleted: AppState["deleted"] = {
+    modules: [],
+    assessments: [],
+    schedule: [],
+    attendance: [],
+  };
+  private settings: Record<string, unknown> = {};
   private user: User | null = null;
   private profile: UserProfile | null = null;
   private activeUserId: string | null = null;
@@ -143,6 +175,13 @@ class Store {
     this.assessments = [];
     this.schedule = [];
     this.attendance = [];
+    this.deleted = {
+      modules: [],
+      assessments: [],
+      schedule: [],
+      attendance: [],
+    };
+    this.settings = {};
     this.user = null;
     this.profile = null;
     this.pendingRemoteFileDeletions = [];
@@ -165,6 +204,8 @@ class Store {
         assessments,
         schedule,
         attendance,
+        deleted,
+        settings,
         user,
         profile,
         pendingRemoteFileDeletions,
@@ -174,6 +215,8 @@ class Store {
         AsyncStorage.getItem(this.storageKey("assessments")),
         AsyncStorage.getItem(this.storageKey("schedule")),
         AsyncStorage.getItem(this.storageKey("attendance")),
+        AsyncStorage.getItem(this.storageKey("deleted")),
+        AsyncStorage.getItem(this.storageKey("settings")),
         AsyncStorage.getItem(this.storageKey("user")),
         AsyncStorage.getItem(this.storageKey("profile")),
         AsyncStorage.getItem(this.storageKey("pendingRemoteFileDeletions")),
@@ -231,6 +274,14 @@ class Store {
         }));
       }
 
+      if (deleted) {
+        this.deleted = JSON.parse(deleted);
+      }
+
+      if (settings) {
+        this.settings = JSON.parse(settings);
+      }
+
       if (user) {
         this.user = JSON.parse(user);
       }
@@ -286,12 +337,24 @@ class Store {
   }
 
   addModule(module: Module): void {
+    this.deleted.modules = this.deleted.modules.filter((id) => id !== module.id);
     this.modules = [...this.modules, module];
 
     void this.saveToStorage("modules", this.modules);
+    void this.saveToStorage("deleted", this.deleted);
   }
 
   deleteModule(id: string): void {
+    const removedAssessments = this.assessments.filter(
+      (assessment) => assessment.moduleId === id,
+    );
+    this.deleted.modules = [...new Set([...this.deleted.modules, id])];
+    this.deleted.assessments = [
+      ...new Set([
+        ...this.deleted.assessments,
+        ...removedAssessments.map((assessment) => assessment.id),
+      ]),
+    ];
     this.modules = this.modules.filter(
       (module) => module.id !== id,
     );
@@ -307,6 +370,7 @@ class Store {
     void this.saveToStorage("modules", this.modules);
     void this.saveToStorage("files", this.files);
     void this.saveToStorage("assessments", this.assessments);
+    void this.saveToStorage("deleted", this.deleted);
   }
 
   // ============================================================
@@ -460,6 +524,9 @@ class Store {
   }
 
   addAssessment(assessment: Assessment): void {
+    this.deleted.assessments = this.deleted.assessments.filter(
+      (id) => id !== assessment.id,
+    );
     this.assessments = [
       ...this.assessments,
       assessment,
@@ -469,6 +536,7 @@ class Store {
       "assessments",
       this.assessments,
     );
+    void this.saveToStorage("deleted", this.deleted);
   }
 
   updateAssessment(
@@ -501,6 +569,7 @@ class Store {
   }
 
   addScheduleItem(item: ScheduleItem): void {
+    this.deleted.schedule = this.deleted.schedule.filter((id) => id !== item.id);
     this.schedule = [
       ...this.schedule,
       item,
@@ -510,9 +579,11 @@ class Store {
       "schedule",
       this.schedule,
     );
+    void this.saveToStorage("deleted", this.deleted);
   }
 
   deleteScheduleItem(id: string): void {
+    this.deleted.schedule = [...new Set([...this.deleted.schedule, id])];
     this.schedule = this.schedule.filter(
       (scheduleItem) =>
         scheduleItem.id !== id,
@@ -522,6 +593,7 @@ class Store {
       "schedule",
       this.schedule,
     );
+    void this.saveToStorage("deleted", this.deleted);
   }
 
   // ============================================================
@@ -530,6 +602,62 @@ class Store {
 
   getAttendance(): AttendanceRecord[] {
     return [...this.attendance];
+  }
+
+  getSettings(): Record<string, unknown> {
+    return { ...this.settings };
+  }
+
+  setSettings(settings: Record<string, unknown>): void {
+    this.settings = { ...settings };
+    void this.saveToStorage("settings", this.settings);
+  }
+
+  getAppState(): AppState {
+    return {
+      modules: this.getModules(),
+      assessments: this.getAssessments(),
+      schedule: this.getSchedule(),
+      attendance: this.getAttendance(),
+      deleted: {
+        modules: [...this.deleted.modules],
+        assessments: [...this.deleted.assessments],
+        schedule: [...this.deleted.schedule],
+        attendance: [...this.deleted.attendance],
+      },
+      profile: this.getProfile(),
+      settings: this.getSettings(),
+    };
+  }
+
+  replaceAppState(state: AppState): void {
+    this.modules = state.modules.map((module) => ({
+      ...module,
+      fileCount: this.files.filter((file) => file.moduleId === module.id).length,
+    }));
+    this.assessments = [...state.assessments];
+    this.schedule = [...state.schedule];
+    this.attendance = state.attendance.map((record) => ({
+      ...record,
+      pointsProcessed:
+        record.pointsProcessed ?? record.status === "absent",
+    }));
+    this.profile = state.profile;
+    this.deleted = {
+      modules: [...state.deleted.modules],
+      assessments: [...state.deleted.assessments],
+      schedule: [...state.deleted.schedule],
+      attendance: [...state.deleted.attendance],
+    };
+    this.settings = { ...state.settings };
+
+    void this.saveToStorage("modules", this.modules);
+    void this.saveToStorage("assessments", this.assessments);
+    void this.saveToStorage("schedule", this.schedule);
+    void this.saveToStorage("attendance", this.attendance);
+    void this.saveToStorage("deleted", this.deleted);
+    void this.saveToStorage("profile", this.profile);
+    void this.saveToStorage("settings", this.settings);
   }
 
   addAttendance(record: AttendanceRecord): void {
@@ -710,6 +838,13 @@ class Store {
     this.assessments = [];
     this.schedule = [];
     this.attendance = [];
+    this.deleted = {
+      modules: [],
+      assessments: [],
+      schedule: [],
+      attendance: [],
+    };
+    this.settings = {};
     this.user = null;
     this.profile = null;
     this.pendingRemoteFileDeletions = [];
@@ -721,6 +856,8 @@ class Store {
         "assessments",
         "schedule",
         "attendance",
+        "deleted",
+        "settings",
         "user",
         "profile",
         "pendingRemoteFileDeletions",

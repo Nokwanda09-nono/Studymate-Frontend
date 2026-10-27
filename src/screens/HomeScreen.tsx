@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../components/ButtomNav";
 import { CustomCard } from "../components/CustomCard";
 import { ProfileAvatar } from "../components/ProfileAvatar";
+import { WebLayout } from "../components/WebLayout";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 
@@ -70,12 +71,13 @@ export function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+    <WebLayout>
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
         {/* Welcome Section */}
         <LinearGradient
           colors={["#0d311fff", "#085716ff"]}
@@ -230,7 +232,7 @@ export function HomeScreen() {
 
           <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => goTo("Schedule")}
+            onPress={() => navigation.navigate("Schedule", { tab: "assessments", generate: true })}
             activeOpacity={0.7}
           >
             <LinearGradient
@@ -247,6 +249,7 @@ export function HomeScreen() {
 
       <BottomNav />
     </SafeAreaView>
+  </WebLayout>
   );
 }
 
@@ -427,16 +430,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   actionItem: {
-    width: "48%",
-    aspectRatio: 1.3,
+    width: Platform.OS === "web" ? "23.5%" : "48%",
+    minWidth: Platform.OS === "web" ? 180 : undefined,
+    height: Platform.OS === "web" ? 110 : undefined,
+    aspectRatio: Platform.OS === "web" ? undefined : 1.3,
   },
   actionBackground: {
     flex: 1,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 14,
+    padding: 12,
     justifyContent: "center",
     alignItems: "center",
-    gap: 10,
+    gap: 6,
     borderWidth: 1,
     borderColor: "#f3f4f6",
   },

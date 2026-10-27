@@ -6,14 +6,22 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "studymate",
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#208AEF"
+    },
     "plugins": [
       [
         "expo-splash-screen",
         {
+          "image": "./assets/images/splash-icon.png",
           "backgroundColor": "#208AEF"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-image",
+      "expo-web-browser"
     ],
     "ios": {
       "bundleIdentifier": "com.yourcompany.studymate"
