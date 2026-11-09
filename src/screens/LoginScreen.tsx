@@ -1,21 +1,22 @@
+import { CustomButton } from '@/components/CustomButton';
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from 'react-native';
-import { CustomButton } from '../components/CustomButton';
 import { useAuth } from '../context/AuthContext';
 
 type RootStackParamList = {
@@ -98,13 +99,15 @@ export function LoginScreen() {
     setResendLoading(true);
     try {
       await resendVerification(email);
-      
+
       if (Platform.OS === 'web') {
         if (typeof window !== 'undefined') {
           window.alert('A new verification code has been sent to your email.');
         }
         if (openVerification) {
-          navigation.navigate('VerifyEmail', { email: email.trim() });
+          navigation.navigate('VerifyEmail', {
+            email: email.trim(),
+          });
         }
       } else {
         Alert.alert(
@@ -115,7 +118,9 @@ export function LoginScreen() {
               text: 'OK',
               onPress: () => {
                 if (openVerification) {
-                  navigation.navigate('VerifyEmail', { email: email.trim() });
+                  navigation.navigate('VerifyEmail', {
+                    email: email.trim(),
+                  });
                 }
               },
             },
@@ -175,7 +180,7 @@ export function LoginScreen() {
           <View style={[styles.card, isSmallDevice ? styles.cardSmall : styles.cardLarge]}>
             <View style={[styles.header, isSmallDevice && styles.headerSmall]}>
               <View style={[styles.iconContainer, isSmallDevice ? styles.iconContainerSmall : styles.iconContainerLarge]}>
-                <Ionicons name="school" size={isSmallDevice ? 28 : 38} color="white" />
+                <Image source={require('../../assets/images/Logo.png')} style={isSmallDevice ? styles.logoImageSmall : styles.logoImage} />
               </View>
               <Text style={[styles.title, isSmallDevice && styles.titleSmall]}>Welcome Back</Text>
               <Text style={[styles.subtitle, isSmallDevice && styles.subtitleSmall]}>
@@ -219,7 +224,7 @@ export function LoginScreen() {
                   returnKeyType="go"
                   onSubmitEditing={handleLogin}
                 />
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
                   disabled={loading}
                   hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
@@ -232,7 +237,7 @@ export function LoginScreen() {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.forgotPassword, isSmallDevice && styles.forgotPasswordSmall]}
                 disabled={loading || resetLoading}
                 onPress={handleForgotPassword}
@@ -265,7 +270,7 @@ export function LoginScreen() {
 
               <View style={[styles.registerContainer, isSmallDevice && styles.registerContainerSmall]}>
                 <Text style={[styles.registerText, isSmallDevice && styles.registerTextSmall]}>Don&apos;t have an account? </Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => navigation.navigate('Register')}
                   disabled={loading}
                 >
@@ -483,5 +488,19 @@ const styles = StyleSheet.create({
   },
   registerLinkSmall: {
     fontSize: 12,
+  },
+  logoImage: {
+    width: 120,
+    height: 120,
+    resizeMode: 'contain',
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  logoImageSmall: {
+    width: 80,
+    height: 80,
+    resizeMode: 'contain',
+    alignSelf: 'center',
+    marginBottom: 15,
   },
 });

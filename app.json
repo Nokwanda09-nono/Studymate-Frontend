@@ -1,5 +1,18 @@
 {
   "expo": {
+    "icon": "./assets/images/Logo.png",
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/Logo.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "ios": {
+      "icon": "./assets/images/Logo.png"
+    },
+    "web": {
+      "favicon": "./assets/images/Logo.png"
+    },
     "name": "StudyMate",
     "slug": "StudyMate",
     "version": "1.0.0",
@@ -21,7 +34,8 @@
       ],
       "expo-sharing",
       "expo-image",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "ios": {
       "bundleIdentifier": "com.yourcompany.studymate"

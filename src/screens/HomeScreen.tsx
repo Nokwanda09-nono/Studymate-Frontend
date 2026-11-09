@@ -38,7 +38,7 @@ export function HomeScreen() {
   };
 
   // Stats calculations
-  const todayOfWeek = new Date().getDay();
+  const todayOfWeek = (new Date().getDay() + 6) % 7;
   const todayClasses = schedule.filter((s) => s.dayOfWeek === todayOfWeek);
 
   const completedAssessments = assessments.filter((a) => a.completed);
@@ -290,7 +290,8 @@ const styles = StyleSheet.create({
   },
   notificationButton: {
     padding: 6,
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(0,0,0,0.15)",
+    borderRadius: 8,
   },
   welcomeInfo: {
     flex: 1,
@@ -437,10 +438,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   actionItem: {
-    width: Platform.OS === "web" ? "23.5%" : "48%",
-    minWidth: Platform.OS === "web" ? 180 : undefined,
-    height: Platform.OS === "web" ? 110 : undefined,
-    aspectRatio: Platform.OS === "web" ? undefined : 1.3,
+    width: (Platform.OS === "web" ? "23.5%" : "48%") as any,
+    minWidth: (Platform.OS === "web" ? 180 : undefined) as any,
+    height: (Platform.OS === "web" ? 110 : undefined) as any,
+    aspectRatio: (Platform.OS === "web" ? undefined : 1.3) as any,
   },
   actionBackground: {
     flex: 1,

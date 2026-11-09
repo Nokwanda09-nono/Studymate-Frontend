@@ -15,6 +15,7 @@ import { CustomButton } from '../components/CustomButton';
 import { CustomCard } from '../components/CustomCard';
 import { useStore } from '../context/StoreContext';
 import { QuizQuestion } from '../lib/store';
+import { getLocalDateKey } from '../utils/date';
 
 const generateFallbackQuestions = (count: number): QuizQuestion[] => {
   const questions: QuizQuestion[] = [];
@@ -109,7 +110,7 @@ export function QuizScreen() {
     });
 
     const now = new Date();
-    const todayKey = now.toISOString().slice(0, 10);
+    const todayKey = getLocalDateKey(now);
     const dayOfWeek = (now.getDay() + 6) % 7;
     const matchingSession =
       schedule.find(

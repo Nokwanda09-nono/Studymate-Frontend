@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React from "react";
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useStore } from "../context/StoreContext";
 
 type RootStackParamList = {
@@ -49,9 +49,12 @@ export function WebLayout({ children }: { children: React.ReactNode }) {
       <View style={styles.sidebar}>
         {/* Brand Header */}
         <View style={styles.brandRow}>
-          <View style={styles.brandLogo}>
-            <Ionicons name="school" size={22} color="white" />
-          </View>
+          <Image
+            source={require("../../assets/images/Logo.png")}
+            style={styles.brandLogo}
+            resizeMode="contain"
+            accessibilityLabel="StudyMate logo"
+          />
           <Text style={styles.brandText}>StudyMate</Text>
         </View>
 
@@ -167,9 +170,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#6366f1",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: "white",
   },
   brandText: {
     fontSize: 20,

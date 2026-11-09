@@ -875,7 +875,7 @@ export function ProfileScreen() {
             </View>
             <Text style={styles.pointsHint}>
               {studyPoints <= 100
-                ? "Your points are critically low. Attend sessions to avoid account action."
+                ? "Your points are critically low. If your balance reaches 0, your account and data will be permanently deleted."
                 : "Keep your scheduled sessions attended to protect your points."}
             </Text>
           </View>

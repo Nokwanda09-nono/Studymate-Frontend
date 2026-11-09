@@ -7,11 +7,12 @@ import React, {
     useRef,
     useState,
 } from "react";
+import { AppState as RNAppState } from "react-native";
 
 import {
+    AppState,
     Assessment,
     AttendanceRecord,
-    AppState,
     FileItem,
     Module,
     ScheduleItem,
@@ -26,6 +27,11 @@ import {
     uploadFileToDatabase,
 } from "../lib/fileApi";
 import { fetchAppState, saveAppState } from "../lib/appStateApi";
+import {
+  cancelStudyReminders,
+  sendUserNotification,
+  syncStudyReminders,
+} from "../lib/notificationService";
 import { useAuth } from "./AuthContext";
 
 interface StoreContextType {
@@ -116,7 +122,11 @@ const mergeAppState = (local: AppState, remote: AppState): AppState => {
 export const StoreProvider: React.FC<{
   children: React.ReactNode;
 }> = ({ children }) => {
-  const { user: authUser } = useAuth();
+  const { user: authUser, deleteAccount } = useAuth();
+  const deleteAccountRef = useRef(deleteAccount);
+  useEffect(() => {
+    deleteAccountRef.current = deleteAccount;
+  }, [deleteAccount]);
   const [modules, setModules] = useState<Module[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
@@ -130,6 +140,30 @@ export const StoreProvider: React.FC<{
   const [profile, setProfileState] =
     useState<UserProfile | null>(null);
   const syncQueue = useRef<Promise<void>>(Promise.resolve());
+  const loadedUserIdRef = useRef<string | null>(null);
+  const settingsRef = useRef(settings);
+  const lastDeletionAttemptRef = useRef<{
+    userId: string;
+    timestamp: number;
+  } | null>(null);
+  const pointsSyncPendingRef = useRef(false);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  const notifyUser = async (title: string, body: string): Promise<boolean> => {
+    if (settingsRef.current.notificationsEnabled !== true) {
+      return false;
+    }
+
+    try {
+      return await sendUserNotification(title, body);
+    } catch (error) {
+      console.error(`Could not send notification "${title}":`, error);
+      return false;
+    }
+  };
 
   const queueAppStateSync = () => {
     const state = store.getAppState();
@@ -144,6 +178,201 @@ export const StoreProvider: React.FC<{
       console.error("Could not sync StudyMate data to the server:", error);
     });
   };
+
+  useEffect(() => {
+    let disposed = false;
+    let cancelScheduledReminders: (() => Promise<void>) | undefined;
+
+    if (!authUser?.id || settings.notificationsEnabled !== true) {
+      void cancelStudyReminders().catch((error) => {
+        console.error("Could not cancel study reminders:", error);
+      });
+      return;
+    }
+
+    void syncStudyReminders(schedule)
+      .then((cancel) => {
+        if (disposed) {
+          void cancel().catch((error) => {
+            console.error("Could not update study reminders:", error);
+          });
+        } else {
+          cancelScheduledReminders = cancel;
+        }
+      })
+      .catch((error) => {
+        console.error("Could not schedule study reminders:", error);
+      });
+
+    return () => {
+      disposed = true;
+      if (cancelScheduledReminders) {
+        void cancelScheduledReminders().catch((error) => {
+          console.error("Could not cancel study reminders:", error);
+        });
+      }
+    };
+  }, [authUser?.id, schedule, settings.notificationsEnabled]);
+
+  const processPointEvaluationRef = useRef<() => Promise<void>>(
+    async () => {},
+  );
+  const pointEvaluationInProgressRef = useRef(false);
+  const runPointEvaluation = async () => {
+    if (pointEvaluationInProgressRef.current) {
+      return;
+    }
+    pointEvaluationInProgressRef.current = true;
+
+    try {
+      const evaluation = store.evaluateMissedSessions();
+      if (!evaluation) {
+        return;
+      }
+
+      if (evaluation.profile.studyPoints === 0) {
+        const lastAttempt = lastDeletionAttemptRef.current;
+        if (
+          loadedUserIdRef.current &&
+          lastAttempt?.userId === loadedUserIdRef.current &&
+          Date.now() - lastAttempt.timestamp < 5 * 60 * 1000
+        ) {
+          return;
+        }
+        if (loadedUserIdRef.current) {
+          lastDeletionAttemptRef.current = {
+            userId: loadedUserIdRef.current,
+            timestamp: Date.now(),
+          };
+        }
+      }
+
+      const needsSync =
+        evaluation.missedSessions.length > 0 ||
+        evaluation.pointsChanged ||
+        evaluation.lowPointsReached ||
+        evaluation.deletionThresholdReached;
+
+      if (evaluation.missedSessions.length) {
+        const missedCount = evaluation.missedSessions.length;
+        await notifyUser(
+          "Register marked absent",
+          `You missed ${missedCount} study session${missedCount === 1 ? "" : "s"}. ${evaluation.deductedPoints} points were deducted. Balance: ${evaluation.profile.studyPoints} points.`,
+        );
+      }
+
+      if (evaluation.lowPointsReached) {
+        const notificationSent = await notifyUser(
+          "Study points are low",
+          `You have ${evaluation.profile.studyPoints} points. If your balance reaches 0, your account and data will be permanently deleted.`,
+        );
+        if (notificationSent) {
+          const profileWithAlert = {
+            ...evaluation.profile,
+            lowPointsNotificationSent: true,
+          };
+          store.setProfile(profileWithAlert);
+          setProfileState(profileWithAlert);
+        }
+      }
+
+      if (evaluation.deletionThresholdReached) {
+        await notifyUser(
+          "Account deletion threshold reached",
+          "Your study points reached 0. Your account and data will be permanently deleted.",
+        );
+      }
+
+      if (needsSync || pointsSyncPendingRef.current || evaluation.profile.studyPoints === 0) {
+        setAttendance(store.getAttendance());
+        setProfileState(store.getProfile());
+        pointsSyncPendingRef.current = true;
+        try {
+          await saveAppState(store.getAppState());
+          pointsSyncPendingRef.current = false;
+        } catch (error) {
+          console.error("Could not save attendance and points updates:", error);
+          if (evaluation.profile.studyPoints === 0) {
+            await notifyUser(
+              "Account deletion is pending",
+              "Your balance reached 0, but the account could not be deleted yet. Reopen StudyMate when you have an internet connection to retry.",
+            );
+            return;
+          }
+        }
+      }
+
+      if (evaluation.profile.studyPoints === 0) {
+        try {
+          const cleanupWarnings = await deleteAccountRef.current();
+          await notifyUser(
+            "StudyMate account deleted",
+            cleanupWarnings.length
+              ? "Your account was permanently deleted, but some uploaded files need manual cleanup."
+              : "Your account and StudyMate data were permanently deleted.",
+          );
+          await store.clearAllData();
+          await cancelStudyReminders().catch((error) => {
+            console.error("Could not cancel reminders during account deletion:", error);
+          });
+          setModules([]);
+          setAssessments([]);
+          setFiles([]);
+          setSchedule([]);
+          setAttendance([]);
+          setSettingsState({});
+          setUserState(null);
+          setProfileState(null);
+          loadedUserIdRef.current = null;
+          cleanupWarnings.forEach((warning) => {
+            console.warn("Account deletion cleanup warning:", warning);
+          });
+        } catch (error) {
+          console.error("Could not permanently delete the zero-point account:", error);
+          await notifyUser(
+            "Account deletion is pending",
+            `Your balance reached 0, but account deletion failed: ${error instanceof Error ? error.message : "unknown error"}. Reopen StudyMate to retry.`,
+          );
+        }
+      }
+    } finally {
+      pointEvaluationInProgressRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    processPointEvaluationRef.current = runPointEvaluation;
+  });
+
+  useEffect(() => {
+    if (!authUser?.id) {
+      loadedUserIdRef.current = null;
+      return;
+    }
+
+    const evaluateWhileActive = () => {
+      if (
+        RNAppState.currentState === "active" &&
+        loadedUserIdRef.current === authUser.id
+      ) {
+        void processPointEvaluationRef.current().catch((error) => {
+          console.error("Could not evaluate missed study sessions:", error);
+        });
+      }
+    };
+
+    const subscription = RNAppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        evaluateWhileActive();
+      }
+    });
+    const interval = setInterval(evaluateWhileActive, 60_000);
+
+    return () => {
+      subscription.remove();
+      clearInterval(interval);
+    };
+  }, [authUser?.id]);
 
   /*
    * ----------------------------------------------------------
@@ -164,6 +393,7 @@ export const StoreProvider: React.FC<{
 
     const loadData = async () => {
       try {
+        loadedUserIdRef.current = null;
         if (!authUser?.id) {
           setModules([]);
           setAssessments([]);
@@ -188,7 +418,6 @@ export const StoreProvider: React.FC<{
           return;
         }
 
-        let remoteSyncAvailable = false;
         try {
           const localState = store.getAppState();
           const remoteState = await fetchAppState();
@@ -202,7 +431,6 @@ export const StoreProvider: React.FC<{
 
           store.replaceAppState(mergedState);
           await saveAppState(mergedState);
-          remoteSyncAvailable = true;
         } catch (syncError) {
           console.error("Could not load or sync StudyMate data:", syncError);
         }
@@ -215,13 +443,12 @@ export const StoreProvider: React.FC<{
         if (initializedProfile) {
           store.setProfile(initializedProfile);
         }
-        store.evaluateMissedSessions();
-        if (remoteSyncAvailable) {
-          try {
-            await saveAppState(store.getAppState());
-          } catch (syncError) {
-            console.error("Could not save updated StudyMate data:", syncError);
-          }
+        settingsRef.current = store.getSettings();
+        setSettingsState(settingsRef.current);
+        loadedUserIdRef.current = authUser.id;
+        await processPointEvaluationRef.current();
+        if (authUser.id !== loadedUserIdRef.current) {
+          return;
         }
 
         try {
@@ -320,8 +547,6 @@ export const StoreProvider: React.FC<{
         setFiles(store.getFiles());
         setSchedule(store.getSchedule());
         setAttendance(store.getAttendance());
-        setSettingsState(store.getSettings());
-
         setUserState(store.getUser());
         setProfileState(store.getProfile());
       } catch (error) {
@@ -457,11 +682,23 @@ export const StoreProvider: React.FC<{
    */
 
   const addAttendance = (record: AttendanceRecord) => {
-    store.addAttendance(record);
+    const result = store.addAttendance(record);
 
     setAttendance(store.getAttendance());
     setProfileState(store.getProfile());
     queueAppStateSync();
+
+    if (result.changed) {
+      const session = schedule.find((item) => item.id === record.scheduleId);
+      const status = record.status === "present" ? "PRESENT" : "ABSENT";
+      const pointsText = result.pointsRecovered > 0
+        ? ` You recovered ${result.pointsRecovered} points.`
+        : "";
+      void notifyUser(
+        `Register marked ${status}`,
+        `${session?.title || "Your study session"} was marked ${status}.${pointsText}`,
+      );
+    }
   };
 
   /*

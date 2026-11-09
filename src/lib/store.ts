@@ -9,6 +9,7 @@ import {
     clampStudyPoints,
     getStudyTier,
 } from "../utils/studyPoints";
+import { getLocalDateKey } from "../utils/date";
 
 export interface User {
   id: string;
@@ -38,6 +39,7 @@ export interface UserProfile {
   studyTier?: string;
   selectedAvatar?: string;
   lowPointsAlertSent?: boolean;
+  lowPointsNotificationSent?: boolean;
   accountDeletionWarning?: boolean;
   pointsInitialized?: boolean;
   lastPointsEvaluationDate?: string;
@@ -113,6 +115,15 @@ export interface AttendanceRecord {
   date: string;
   status: "present" | "absent";
   pointsProcessed?: boolean;
+}
+
+export interface MissedSessionsEvaluation {
+  profile: UserProfile;
+  missedSessions: AttendanceRecord[];
+  deductedPoints: number;
+  pointsChanged: boolean;
+  lowPointsReached: boolean;
+  deletionThresholdReached: boolean;
 }
 
 export interface AppState {
@@ -660,12 +671,16 @@ class Store {
     void this.saveToStorage("settings", this.settings);
   }
 
-  addAttendance(record: AttendanceRecord): void {
+  addAttendance(
+    record: AttendanceRecord,
+  ): { changed: boolean; pointsRecovered: number } {
     const existingIndex = this.attendance.findIndex(
       (storedRecord) =>
         storedRecord.scheduleId === record.scheduleId &&
         storedRecord.date === record.date,
     );
+    let changed = false;
+    let pointsRecovered = 0;
 
     if (existingIndex >= 0) {
       const existingRecord = this.attendance[existingIndex];
@@ -676,12 +691,14 @@ class Store {
           ...record,
           pointsProcessed: true,
         };
+        changed = true;
 
         if (this.profile) {
+          const previousPoints = this.profile.studyPoints ?? INITIAL_STUDY_POINTS;
           const points = clampStudyPoints(
-            (this.profile.studyPoints ?? INITIAL_STUDY_POINTS) +
-              ATTENDED_SESSION_RECOVERY,
+            previousPoints + ATTENDED_SESSION_RECOVERY,
           );
+          pointsRecovered = points - previousPoints;
           this.profile = {
             ...this.profile,
             studyPoints: points,
@@ -692,12 +709,14 @@ class Store {
       }
     } else {
       this.attendance = [...this.attendance, record];
+      changed = true;
     }
 
     void this.saveToStorage(
       "attendance",
       this.attendance,
     );
+    return { changed, pointsRecovered };
   }
 
   initializeStudyPoints(profile: UserProfile = {}): UserProfile {
@@ -716,13 +735,14 @@ class Store {
       studyTier: getStudyTier(INITIAL_STUDY_POINTS).name,
       pointsInitialized: true,
       lowPointsAlertSent: false,
+      lowPointsNotificationSent: false,
       accountDeletionWarning: false,
     };
   }
 
-  evaluateMissedSessions(now = new Date()): UserProfile | null {
-    if (!this.profile || !this.schedule.length) {
-      return this.profile;
+  evaluateMissedSessions(now = new Date()): MissedSessionsEvaluation | null {
+    if (!this.profile) {
+      return null;
     }
 
     const currentDate = new Date(now);
@@ -734,22 +754,40 @@ class Store {
     const lastEvaluation = this.profile.lastPointsEvaluationDate
       ? new Date(this.profile.lastPointsEvaluationDate)
       : new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    lastEvaluation.setHours(0, 0, 0, 0);
     let points = typeof this.profile.studyPoints === "number"
       ? this.profile.studyPoints
       : INITIAL_STUDY_POINTS;
+    const startingPoints = points;
     const attendance = [...this.attendance];
+    const missedSessions: AttendanceRecord[] = [];
+    let deductedPoints = 0;
+    const todayKey = getLocalDateKey(today);
+    const currentMinutes =
+      currentDate.getHours() * 60 + currentDate.getMinutes();
 
     for (
       const date = new Date(lastEvaluation.getTime());
-      date < today;
+      date <= today;
       date.setDate(date.getDate() + 1)
     ) {
-      const dateKey = date.toISOString().slice(0, 10);
+      const dateKey = getLocalDateKey(date);
       const dayOfWeek = (date.getDay() + 6) % 7;
 
       this.schedule
         .filter((item) => item.is_recurring && item.dayOfWeek === dayOfWeek)
         .forEach((item) => {
+          if (dateKey === todayKey) {
+            const [endHour, endMinute] = item.endTime.split(":").map(Number);
+            if (
+              !Number.isInteger(endHour) ||
+              !Number.isInteger(endMinute) ||
+              endHour * 60 + endMinute > currentMinutes
+            ) {
+              return;
+            }
+          }
+
           const existingRecord = attendance.find(
             (record) => record.scheduleId === item.id && record.date === dateKey,
           );
@@ -763,11 +801,21 @@ class Store {
               pointsProcessed: true,
             };
             attendance.push(absentRecord);
+            missedSessions.push(absentRecord);
+            deductedPoints += Math.min(
+              MISSED_SESSION_DEDUCTION,
+              Math.max(0, points),
+            );
             points -= MISSED_SESSION_DEDUCTION;
           } else if (!existingRecord.pointsProcessed) {
             if (existingRecord.status === "present") {
               points += ATTENDED_SESSION_RECOVERY;
             } else {
+              missedSessions.push(existingRecord);
+              deductedPoints += Math.min(
+                MISSED_SESSION_DEDUCTION,
+                Math.max(0, points),
+              );
               points -= MISSED_SESSION_DEDUCTION;
             }
             existingRecord.pointsProcessed = true;
@@ -783,15 +831,30 @@ class Store {
       lastPointsEvaluationDate: today.toISOString(),
       lowPointsAlertSent:
         this.profile.lowPointsAlertSent || finalPoints <= LOW_POINTS_THRESHOLD,
+      lowPointsNotificationSent:
+        this.profile.lowPointsNotificationSent ?? false,
       accountDeletionWarning:
         this.profile.accountDeletionWarning || finalPoints <= 0,
     };
+
+    const lowPointsReached =
+      !this.profile.lowPointsNotificationSent &&
+      finalPoints <= LOW_POINTS_THRESHOLD;
+    const deletionThresholdReached =
+      !this.profile.accountDeletionWarning && finalPoints <= 0;
 
     this.attendance = attendance;
     this.profile = nextProfile;
     void this.saveToStorage("attendance", this.attendance);
     void this.saveToStorage("profile", this.profile);
-    return nextProfile;
+    return {
+      profile: nextProfile,
+      missedSessions,
+      deductedPoints,
+      pointsChanged: startingPoints !== finalPoints,
+      lowPointsReached,
+      deletionThresholdReached,
+    };
   }
 
   // ============================================================

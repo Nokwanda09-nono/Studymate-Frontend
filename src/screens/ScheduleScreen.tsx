@@ -22,9 +22,9 @@ import { API_URL } from "../config/api";
 import { useStore } from "../context/StoreContext";
 import { generateModuleQuiz } from "../lib/quizApi";
 import { Assessment } from "../lib/store";
+import { getLocalDateKey } from "../utils/date";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const FULL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const HOURS = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00"];
 const COLORS = [
   "#6366f1",
@@ -88,7 +88,7 @@ export function ScheduleScreen() {
 
   // Date and Register helpers
   const todayDate = new Date();
-  const todayKey = todayDate.toISOString().slice(0, 10);
+  const todayKey = getLocalDateKey(todayDate);
   const todayDayOfWeek = (todayDate.getDay() + 6) % 7; // 0=Mon, ..., 6=Sun
   const todayAttendanceRecords = attendance.filter((a) => a.date === todayKey && a.status === "present");
   const isTodayRegistered = todayAttendanceRecords.length > 0;
@@ -710,7 +710,7 @@ export function ScheduleScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.timetableRequiredTitle}>Timetable Required</Text>
                     <Text style={styles.timetableRequiredText}>
-                      "{selectedModObj?.name}" is not on your timetable yet. You must add it to your study timetable before you can generate a quiz.
+                      &quot;{selectedModObj?.name}&quot; is not on your timetable yet. You must add it to your study timetable before you can generate a quiz.
                     </Text>
                     <TouchableOpacity
                       style={styles.addModuleToTimetableBtn}
@@ -720,7 +720,7 @@ export function ScheduleScreen() {
                       }}
                     >
                       <Ionicons name="add-circle" size={16} color="white" />
-                      <Text style={styles.addModuleToTimetableText}>Add "{selectedModObj?.name}" to Timetable</Text>
+                      <Text style={styles.addModuleToTimetableText}>Add &quot;{selectedModObj?.name}&quot; to Timetable</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1214,7 +1214,7 @@ export function ScheduleScreen() {
                 />
               </View>
               <View>
-                <Text style={styles.webMetricLabel}>Today's Register</Text>
+                <Text style={styles.webMetricLabel}>Today&apos;s Register</Text>
                 <Text style={[styles.webMetricValue, { color: isTodayRegistered ? "#16a34a" : "#d97706", fontSize: 16 }]}>
                   {isTodayRegistered ? "Present ✓" : "Pending"}
                 </Text>

@@ -44,6 +44,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<any>;
   register: (firstName: string, lastName: string, email: string, password: string) => Promise<any>;
   forgotPassword: (email: string) => Promise<any>;
+  deleteAccount: () => Promise<string[]>;
   logout: () => Promise<void>;
   verifyEmail: (code: string, email?: string) => Promise<any>;
   resendVerification: (email: string) => Promise<any>;
@@ -185,6 +186,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       throw new Error('Enter both your email address and password.');
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
     let response: Response;
     try {
       response = await fetch(`${API_URL}/login`, {
@@ -193,11 +197,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email: normalizedEmail, password }),
+        signal: controller.signal,
       });
-    } catch (error) {
+      clearTimeout(timeoutId);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error('Login request could not reach the server:', error);
+      if (error?.name === 'AbortError') {
+        throw new Error(
+          `Connection timed out (${API_URL}). Please verify your phone and computer are connected to the same Wi-Fi network and your backend server is running on port 5001.`,
+        );
+      }
       throw new Error(
-        'Could not connect to the StudyMate server. Check your internet connection and confirm the backend is running and reachable from this device.',
+        `Could not connect to server at ${API_URL}. Confirm your backend server is running and reachable from this device.`,
       );
     }
 
@@ -461,6 +473,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const deleteAccount = async (): Promise<string[]> => {
+    const token = (await AsyncStorage.getItem('authToken')) || authToken;
+    if (!token) {
+      throw new Error('You must be signed in to delete your account.');
+    }
+
+    const response = await fetch(`${API_URL}/account`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const data = await parseJsonResponse(response);
+    if (!response.ok) {
+      throw new Error(
+        data.error || data.message || 'The account could not be deleted.',
+      );
+    }
+
+    const cleanupWarnings = Array.isArray(data.cleanupWarnings)
+      ? data.cleanupWarnings.filter(
+          (warning: unknown): warning is string => typeof warning === 'string',
+        )
+      : [];
+
+    try {
+      await AsyncStorage.multiRemove([
+        'authToken',
+        'userData',
+        'onboardingCompleted',
+        'onboardingProfile',
+        'profile',
+        'pendingVerificationEmail',
+        'pendingUserData',
+      ]);
+    } catch (error) {
+      console.error('Could not clear saved account credentials:', error);
+      cleanupWarnings.push('Saved account credentials could not be cleared from this device.');
+    }
+
+    setAuthToken(null);
+    setUser(null);
+    return cleanupWarnings;
+  };
+
   // Save onboarding profile to server (with local fallback)
   const saveOnboardingProfile = async (profileData: OnboardingProfile) => {
     try {
@@ -479,6 +536,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         studyTier: getStudyTier(INITIAL_STUDY_POINTS).name,
         pointsInitialized: true,
         lowPointsAlertSent: false,
+        lowPointsNotificationSent: false,
         accountDeletionWarning: false,
       };
 
@@ -649,6 +707,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         login,
         register,
         forgotPassword,
+        deleteAccount,
         logout,
         verifyEmail,
         resendVerification,
