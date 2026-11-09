@@ -6,6 +6,7 @@ export interface QuizGenParams {
   questionCount: number; // 10 to 20
   questionType?: "mcq_only" | "combination" | "open_ended_only";
   difficulty?: "low" | "medium" | "high";
+  fileIds?: string[];
 }
 
 export async function generateModuleQuiz(
@@ -18,6 +19,7 @@ export async function generateModuleQuiz(
   let count = 10;
   let type = "mcq_only";
   let diff = "medium";
+  let fileIds: string[] | undefined;
 
   if (typeof questionCountOrParams === "number") {
     count = questionCountOrParams;
@@ -25,6 +27,7 @@ export async function generateModuleQuiz(
     count = questionCountOrParams.questionCount || 10;
     type = questionCountOrParams.questionType || "mcq_only";
     diff = questionCountOrParams.difficulty || "medium";
+    fileIds = questionCountOrParams.fileIds;
   }
 
   // Ensure count is between 10 and 20
@@ -40,6 +43,7 @@ export async function generateModuleQuiz(
       questionCount: count,
       questionType: type,
       difficulty: diff,
+      fileIds,
       moduleName,
     }),
   });

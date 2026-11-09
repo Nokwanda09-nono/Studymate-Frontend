@@ -14,6 +14,7 @@ import { FileViewerScreen } from "../screens/FileViewerScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { ModuleDetailScreen } from "../screens/ModuleDetailScreen";
 import { ModulesScreen } from "../screens/ModulesScreen";
+import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { OnboardingScreen } from "../screens/OnboardingScreen";
 import { PDFViewerScreen } from "../screens/PDFViewerScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
@@ -49,6 +50,7 @@ export function AppNavigator() {
       ) : (
         <>
           <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Notifications" component={NotificationsScreen} />
           <Stack.Screen name="AIChat" component={AIChatScreen} />
           <Stack.Screen name="Modules" component={ModulesScreen} />
           <Stack.Screen name="ModuleDetail" component={ModuleDetailScreen} />

@@ -111,9 +111,11 @@ export function QuizScreen() {
     const now = new Date();
     const todayKey = now.toISOString().slice(0, 10);
     const dayOfWeek = (now.getDay() + 6) % 7;
-    const matchingSession = schedule.find(
-      (item) => item.moduleId === assessment.moduleId && item.dayOfWeek === dayOfWeek,
-    );
+    const matchingSession =
+      schedule.find(
+        (item) => item.moduleId === assessment.moduleId && item.dayOfWeek === dayOfWeek,
+      ) ||
+      schedule.find((item) => item.moduleId === assessment.moduleId);
 
     if (matchingSession) {
       addAttendance({

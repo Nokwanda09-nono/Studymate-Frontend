@@ -86,6 +86,9 @@ export function HomeScreen() {
           style={styles.welcomeCard}
         >
           <View style={styles.welcomeHeader}>
+            <TouchableOpacity onPress={() => navigation.navigate('Notifications')} style={styles.notificationButton}>
+              <Ionicons name="notifications-outline" size={24} color="white" />
+            </TouchableOpacity>
             <View style={styles.welcomeInfo}>
               <Text style={styles.dateText}>{formatDate()}</Text>
               <Text style={styles.greetingText}>
@@ -284,6 +287,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  notificationButton: {
+    padding: 6,
+    backgroundColor: "transparent",
   },
   welcomeInfo: {
     flex: 1,

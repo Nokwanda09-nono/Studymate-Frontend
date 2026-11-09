@@ -25,11 +25,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import DocumentPdf from "../components/DocumentPdf";
 import { API_URL } from "../config/api";
 import { useStore } from "../context/StoreContext";
-import DocumentPdf from "../components/DocumentPdf";
 import { createChatSession, sendChatMessage } from "../lib/aiChatApi";
 import { uploadFileToDatabase } from "../lib/fileApi";
+import { SlideData, parsePptxArrayBuffer, parseSlidesFromText } from "../lib/pptxParser";
 import type { RootStackParamList } from "../navigation/types";
 
 type ContentResponse = {
@@ -38,17 +39,11 @@ type ContentResponse = {
   name: string;
   type: string;
   size: number;
-  kind: "text" | "image" | "pdf" | "unsupported";
+  kind: "text" | "image" | "pdf" | "pptx" | "unsupported";
   text: string | null;
   rawUrl: string;
   error?: string;
 };
-
-interface SlideData {
-  slideNumber: number;
-  title: string;
-  lines: string[];
-}
 
 export function FileViewerScreen() {
   const navigation =
@@ -75,10 +70,11 @@ export function FileViewerScreen() {
   const [remoteId, setRemoteId] = useState<string | null>(null);
 
   // Web Layout & View States (ZeusLearn Style)
-  const [activeTab, setActiveTab] = useState<"files" | "flashcards" | "quizzes" | "summary" | "notes">("files");
+  const [activeTab, setActiveTab] = useState<"files" | "quizzes" | "summary">("files");
   const [zoomLevel, setZoomLevel] = useState(100);
 
   // Presentation Slide States
+  const [slides, setSlides] = useState<SlideData[]>([]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [presentationMode, setPresentationMode] = useState<"slides" | "text">("slides");
 
@@ -124,48 +120,8 @@ export function FileViewerScreen() {
     return String(val);
   };
 
-  const parseSlidesFromText = (rawText: string): SlideData[] => {
-    if (!rawText) return [];
-
-    const slideParts = rawText
-      .split(/(?:^|\n)(?:---|\*\*\*|===)?\s*(?:Slide|Page)\s*\d+[:\s-]*/i)
-      .filter((p) => p.trim().length > 0);
-
-    if (slideParts.length > 1) {
-      return slideParts.map((part, index) => {
-        const lines = part.split("\n").map((l) => l.trim()).filter(Boolean);
-        return {
-          slideNumber: index + 1,
-          title: lines[0] || `Slide ${index + 1}`,
-          lines: lines.slice(1).length > 0 ? lines.slice(1) : lines,
-        };
-      });
-    }
-
-    const paragraphs = rawText.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
-    if (paragraphs.length > 1) {
-      return paragraphs.map((p, index) => {
-        const lines = p.split("\n").map((l) => l.trim()).filter(Boolean);
-        return {
-          slideNumber: index + 1,
-          title: lines[0] || `Slide ${index + 1}`,
-          lines: lines.slice(1).length > 0 ? lines.slice(1) : lines,
-        };
-      });
-    }
-
-    const lines = rawText.split("\n").map((l) => l.trim()).filter(Boolean);
-    return [
-      {
-        slideNumber: 1,
-        title: lines[0] || "Presentation Slide 1",
-        lines: lines.slice(1).length > 0 ? lines.slice(1) : lines,
-      },
-    ];
-  };
-
   // ---------------------------------------------------------
-  // Fetch viewer-ready content from the server
+  // Fetch viewer-ready content from the server & extract PPTX
   // ---------------------------------------------------------
   useEffect(() => {
     let mounted = true;
@@ -206,7 +162,52 @@ export function FileViewerScreen() {
           throw new Error(data.error || `HTTP ${response.status}`);
         }
 
-        if (mounted) setContent(data);
+        if (mounted) {
+          setContent(data);
+
+          // Check if file is a presentation
+          const nameLower = (file?.name || data.name || "").toLowerCase();
+          const isPptx =
+            nameLower.endsWith(".pptx") ||
+            nameLower.endsWith(".ppt") ||
+            nameLower.endsWith(".key") ||
+            nameLower.endsWith(".odp") ||
+            data.kind === "pptx" ||
+            data.type?.includes("presentation") ||
+            data.type?.includes("powerpoint");
+
+          if (isPptx) {
+            let extractedSlides: SlideData[] = [];
+            if (data.text) {
+              extractedSlides = parseSlidesFromText(data.text);
+            }
+
+            // If few or no slides were in text, attempt client-side JSZip extraction from raw file
+            if (extractedSlides.length <= 1) {
+              try {
+                const rawRes = await fetch(`${API_URL}/files/${encodeURIComponent(remoteFileId)}/raw`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (rawRes.ok) {
+                  const arrayBuf = await rawRes.arrayBuffer();
+                  const zipSlides = await parsePptxArrayBuffer(arrayBuf);
+                  if (zipSlides.length > 0) {
+                    extractedSlides = zipSlides;
+                    if (!data.text) {
+                      data.text = zipSlides
+                        .map((s) => `--- Slide ${s.slideNumber}: ${s.title} ---\n${s.lines.join("\n")}`)
+                        .join("\n\n");
+                    }
+                  }
+                }
+              } catch (clientZipErr) {
+                console.warn("Client PPTX extraction fallback notice:", clientZipErr);
+              }
+            }
+
+            setSlides(extractedSlides);
+          }
+        }
       } catch (e: any) {
         if (mounted) setError(e?.message || "Failed to load file.");
       } finally {
@@ -355,6 +356,51 @@ export function FileViewerScreen() {
     }
   };
 
+  // Presentation and Slides resolution
+  const textData = getDisplayText(content?.text);
+  const fileNameLower = (file?.name || content?.name || "").toLowerCase();
+  const isPresentation =
+    fileNameLower.endsWith(".pptx") ||
+    fileNameLower.endsWith(".ppt") ||
+    fileNameLower.endsWith(".key") ||
+    fileNameLower.endsWith(".odp") ||
+    content?.kind === "pptx" ||
+    file?.type?.includes("presentation") ||
+    file?.type?.includes("powerpoint") ||
+    textData.includes("--- Slide");
+
+  const currentSlides =
+    slides.length > 0
+      ? slides
+      : isPresentation && textData
+        ? parseSlidesFromText(textData)
+        : [];
+  const activeSlide =
+    currentSlides[currentSlideIndex] ||
+    currentSlides[0] || {
+      slideNumber: 1,
+      title: file?.name || "Slide 1",
+      lines: ["No text content."],
+    };
+
+  // Keyboard navigation for desktop web (Left/Right arrows flip slides)
+  useEffect(() => {
+    if (Platform.OS !== "web" || !isPresentation || currentSlides.length <= 1) return;
+
+    const handleKeyDown = (e: any) => {
+      if (e.key === "ArrowRight" || e.key === "PageDown") {
+        setCurrentSlideIndex((prev) => Math.min(currentSlides.length - 1, prev + 1));
+      } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        setCurrentSlideIndex((prev) => Math.max(0, prev - 1));
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [isPresentation, currentSlides.length]);
+
   // ---------------------------------------------------------
   // Render
   // ---------------------------------------------------------
@@ -376,16 +422,6 @@ export function FileViewerScreen() {
   // ZEUSLEARN WEB SPLIT-WORKSPACE LAYOUT (Platform.OS === 'web')
   // =========================================================
   if (Platform.OS === "web") {
-    const textData = getDisplayText(content?.text);
-    const fileNameLower = file.name.toLowerCase();
-    const isPresentation =
-      fileNameLower.endsWith(".pptx") ||
-      fileNameLower.endsWith(".ppt") ||
-      fileNameLower.endsWith(".key") ||
-      textData.includes("--- Slide");
-
-    const slides = isPresentation ? parseSlidesFromText(textData) : [];
-    const activeSlide = slides[currentSlideIndex] || slides[0];
 
     return (
       <SafeAreaView style={styles.webRoot}>
@@ -405,20 +441,23 @@ export function FileViewerScreen() {
             <View style={styles.webTabBar}>
               {[
                 { id: "files", label: "Files", icon: "document-text-outline" },
-                { id: "flashcards", label: "Flashcards", icon: "albums-outline" },
                 { id: "quizzes", label: "Quizzes", icon: "help-circle-outline" },
                 { id: "summary", label: "Summary", icon: "journal-outline" },
-                { id: "notes", label: "Notes", icon: "create-outline" },
               ].map((tab) => (
                 <TouchableOpacity
                   key={tab.id}
                   style={[styles.webTabItem, activeTab === tab.id && styles.webTabItemActive]}
-                  onPress={() => {
-                    setActiveTab(tab.id as any);
-                    if (tab.id !== "files") {
-                      handleQuickPrompt(`Generate ${tab.label} for this document: ${file.name}`);
-                    }
-                  }}
+                    onPress={() => {
+                      if (tab.id === "quizzes") {
+                        // Navigate to Quiz screen with the current module ID
+                        navigation.navigate('Quiz' as any, { moduleId: module?.id });
+                      } else {
+                        setActiveTab(tab.id as any);
+                        if (tab.id !== "files") {
+                          handleQuickPrompt(`Generate ${tab.label} for this document: ${file.name}`);
+                        }
+                      }
+                    }}
                 >
                   <Ionicons name={tab.icon as any} size={17} color={activeTab === tab.id ? "#6366f1" : "#6b7280"} />
                   <Text style={[styles.webTabText, activeTab === tab.id && styles.webTabTextActive]}>{tab.label}</Text>
@@ -503,15 +542,32 @@ export function FileViewerScreen() {
                 <ScrollView contentContainerStyle={styles.imageScroll}>
                   <AuthedImage fileId={remoteId} />
                 </ScrollView>
-              ) : isPresentation && slides.length > 0 && presentationMode === "slides" ? (
+              ) : isPresentation && currentSlides.length > 0 && presentationMode === "slides" ? (
                 /* INTERACTIVE POWERPOINT SLIDE CANVAS (ZeusLearn Widescreen Slide Deck) */
                 <View style={styles.webPresentationWrapper}>
                   {/* Active Widescreen Slide Card */}
                   <View style={styles.webSlideCard}>
                     <View style={styles.webSlideHeaderRow}>
                       <View style={styles.webSlideBadge}>
-                        <Ionicons name="easel" size={14} color="#6366f1" />
-                        <Text style={styles.webSlideBadgeText}>SLIDE {activeSlide.slideNumber} OF {slides.length}</Text>
+                        <Ionicons name="easel" size={14} color="#ea580c" />
+                        <Text style={styles.webSlideBadgeText}>SLIDE {activeSlide.slideNumber} OF {currentSlides.length}</Text>
+                      </View>
+                      <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                        <TouchableOpacity
+                          style={[styles.webSlideNavBtn, currentSlideIndex === 0 && { opacity: 0.4 }]}
+                          onPress={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))}
+                          disabled={currentSlideIndex === 0}
+                        >
+                          <Ionicons name="chevron-back" size={16} color="#1e293b" />
+                        </TouchableOpacity>
+                        <Text style={styles.webSlideNavText}>Slide {currentSlideIndex + 1} / {currentSlides.length}</Text>
+                        <TouchableOpacity
+                          style={[styles.webSlideNavBtn, currentSlideIndex === currentSlides.length - 1 && { opacity: 0.4 }]}
+                          onPress={() => setCurrentSlideIndex(Math.min(currentSlides.length - 1, currentSlideIndex + 1))}
+                          disabled={currentSlideIndex === currentSlides.length - 1}
+                        >
+                          <Ionicons name="chevron-forward" size={16} color="#1e293b" />
+                        </TouchableOpacity>
                       </View>
                     </View>
 
@@ -525,12 +581,21 @@ export function FileViewerScreen() {
                           </View>
                         ))}
                       </View>
+                      {activeSlide.notes ? (
+                        <View style={styles.webNotesBox}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                            <Ionicons name="bulb-outline" size={15} color="#d97706" />
+                            <Text style={styles.webNotesTitle}>Speaker Notes</Text>
+                          </View>
+                          <Text style={styles.webNotesText}>{activeSlide.notes}</Text>
+                        </View>
+                      ) : null}
                     </ScrollView>
                   </View>
 
                   {/* Horizontal Slide Selector Bar */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.webSlideSelectorBar}>
-                    {slides.map((s, idx) => (
+                    {currentSlides.map((s, idx) => (
                       <TouchableOpacity
                         key={s.slideNumber}
                         style={[styles.webSlidePill, idx === currentSlideIndex && styles.webSlidePillActive]}
@@ -543,14 +608,51 @@ export function FileViewerScreen() {
                     ))}
                   </ScrollView>
                 </View>
+              ) : isPresentation && currentSlides.length > 0 && presentationMode === "text" ? (
+                /* FULL PRESENTATION DOCUMENT READING MODE */
+                <ScrollView contentContainerStyle={styles.webTextDocumentScroll}>
+                  {currentSlides.map((slide) => (
+                    <View key={slide.slideNumber} style={styles.webDocSlideBlock}>
+                      <View style={styles.webDocSlideBlockHeader}>
+                        <View style={styles.webDocSlideBadge}>
+                          <Text style={styles.webDocSlideBadgeText}>Slide {slide.slideNumber}</Text>
+                        </View>
+                        <Text style={styles.webDocSlideTitleText}>{slide.title}</Text>
+                      </View>
+                      <View style={styles.webSlideLinesList}>
+                        {slide.lines.map((l, lIdx) => (
+                          <View key={lIdx} style={styles.webSlideLineRow}>
+                            <View style={styles.webBulletDot} />
+                            <Text style={styles.webSlideLineText}>{l}</Text>
+                          </View>
+                        ))}
+                      </View>
+                      {slide.notes ? (
+                        <View style={styles.webNotesBox}>
+                          <Text style={styles.webNotesTitle}>Notes:</Text>
+                          <Text style={styles.webNotesText}>{slide.notes}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  ))}
+                </ScrollView>
               ) : textData ? (
                 <ScrollView contentContainerStyle={styles.webTextDocumentScroll}>
                   <Text style={[styles.textContent, { fontSize: Math.round(14 * (zoomLevel / 100)) }]} selectable>
                     {textData}
                   </Text>
                 </ScrollView>
-              ) : remoteId ? (
+              ) : content?.kind === "pdf" && remoteId ? (
                 <DocumentPdf fileId={remoteId} />
+              ) : isPresentation ? (
+                <View style={styles.center}>
+                  <Ionicons name="easel-outline" size={56} color="#ea580c" />
+                  <Text style={styles.emptyText}>PowerPoint Presentation: {file.name}</Text>
+                  <TouchableOpacity style={styles.primaryButton} onPress={openExternally}>
+                    <Ionicons name="download-outline" size={18} color="white" />
+                    <Text style={styles.primaryButtonText}>Download Presentation</Text>
+                  </TouchableOpacity>
+                </View>
               ) : (
                 <View style={styles.center}>
                   <Text style={styles.emptyText}>Document ready. Ask the AI Tutor or download the original file.</Text>
@@ -629,6 +731,163 @@ export function FileViewerScreen() {
   // =========================================================
   // NATIVE MOBILE LAYOUT
   // =========================================================
+  const renderMobilePresentation = () => {
+    const activeSlide = currentSlides[currentSlideIndex] || currentSlides[0];
+
+    return (
+      <View style={styles.mobilePptxRoot}>
+        {/* Top Control Bar */}
+        <View style={styles.mobilePptxHeader}>
+          <View style={styles.mobilePptxBadge}>
+            <Ionicons name="easel" size={15} color="#ea580c" />
+            <Text style={styles.mobilePptxBadgeText}>
+              SLIDE {activeSlide.slideNumber} OF {currentSlides.length}
+            </Text>
+          </View>
+
+          {/* Mode Switcher */}
+          <View style={styles.mobilePptxModeRow}>
+            <TouchableOpacity
+              style={[styles.mobileModeBtn, presentationMode === "slides" && styles.mobileModeBtnActive]}
+              onPress={() => setPresentationMode("slides")}
+            >
+              <Ionicons
+                name="easel-outline"
+                size={14}
+                color={presentationMode === "slides" ? "#ea580c" : "#64748b"}
+              />
+              <Text style={[styles.mobileModeBtnText, presentationMode === "slides" && styles.mobileModeBtnTextActive]}>
+                Deck
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.mobileModeBtn, presentationMode === "text" && styles.mobileModeBtnActive]}
+              onPress={() => setPresentationMode("text")}
+            >
+              <Ionicons
+                name="reader-outline"
+                size={14}
+                color={presentationMode === "text" ? "#ea580c" : "#64748b"}
+              />
+              <Text style={[styles.mobileModeBtnText, presentationMode === "text" && styles.mobileModeBtnTextActive]}>
+                Document
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {presentationMode === "slides" ? (
+          /* SLIDE DECK VIEW */
+          <View style={{ flex: 1 }}>
+            <View style={styles.mobileSlideCard}>
+              <ScrollView contentContainerStyle={styles.mobileSlideCardScroll} showsVerticalScrollIndicator={false}>
+                <Text style={styles.mobileSlideTitle}>{activeSlide.title}</Text>
+
+                <View style={styles.mobileSlideBullets}>
+                  {activeSlide.lines.map((line, lIdx) => (
+                    <View key={lIdx} style={styles.mobileBulletRow}>
+                      <View style={styles.mobileBulletPoint} />
+                      <Text style={styles.mobileBulletText}>{line}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {activeSlide.notes ? (
+                  <View style={styles.mobileNotesCard}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                      <Ionicons name="bulb-outline" size={15} color="#d97706" />
+                      <Text style={styles.mobileNotesTitle}>Speaker Notes</Text>
+                    </View>
+                    <Text style={styles.mobileNotesText}>{activeSlide.notes}</Text>
+                  </View>
+                ) : null}
+              </ScrollView>
+            </View>
+
+            {/* Slide Navigation Controls */}
+            <View style={styles.mobileSlideNavControls}>
+              <TouchableOpacity
+                style={[styles.mobileNavBtn, currentSlideIndex === 0 && styles.mobileNavBtnDisabled]}
+                onPress={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))}
+                disabled={currentSlideIndex === 0}
+              >
+                <Ionicons name="arrow-back" size={18} color={currentSlideIndex === 0 ? "#94a3b8" : "#0f172a"} />
+                <Text style={[styles.mobileNavBtnText, currentSlideIndex === 0 && { color: "#94a3b8" }]}>Prev</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.mobileNavCounter}>
+                {currentSlideIndex + 1} / {currentSlides.length}
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.mobileNavBtn, currentSlideIndex === currentSlides.length - 1 && styles.mobileNavBtnDisabled]}
+                onPress={() => setCurrentSlideIndex(Math.min(currentSlides.length - 1, currentSlideIndex + 1))}
+                disabled={currentSlideIndex === currentSlides.length - 1}
+              >
+                <Text style={[styles.mobileNavBtnText, currentSlideIndex === currentSlides.length - 1 && { color: "#94a3b8" }]}>Next</Text>
+                <Ionicons name="arrow-forward" size={18} color={currentSlideIndex === currentSlides.length - 1 ? "#94a3b8" : "#0f172a"} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Horizontal Slide Selector Bar */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mobileSlidePillsBar}>
+              {currentSlides.map((s, idx) => (
+                <TouchableOpacity
+                  key={s.slideNumber}
+                  style={[styles.mobileSlidePill, idx === currentSlideIndex && styles.mobileSlidePillActive]}
+                  onPress={() => setCurrentSlideIndex(idx)}
+                >
+                  <Text style={[styles.mobileSlidePillText, idx === currentSlideIndex && styles.mobileSlidePillTextActive]}>
+                    Slide {s.slideNumber}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ) : (
+          /* DOCUMENT READING MODE */
+          <ScrollView contentContainerStyle={styles.mobileDocModeScroll} showsVerticalScrollIndicator={false}>
+            {currentSlides.map((slide) => (
+              <View key={slide.slideNumber} style={styles.mobileDocSlideSection}>
+                <View style={styles.mobileDocSlideHeader}>
+                  <View style={styles.mobileDocNumberBadge}>
+                    <Text style={styles.mobileDocNumberText}>{slide.slideNumber}</Text>
+                  </View>
+                  <Text style={styles.mobileDocSlideTitle}>{slide.title}</Text>
+                </View>
+
+                <View style={styles.mobileDocLinesContainer}>
+                  {slide.lines.map((line, idx) => (
+                    <View key={idx} style={styles.mobileBulletRow}>
+                      <View style={styles.mobileBulletPoint} />
+                      <Text style={styles.mobileBulletText}>{line}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {slide.notes ? (
+                  <View style={styles.mobileNotesCard}>
+                    <Text style={styles.mobileNotesTitle}>Notes:</Text>
+                    <Text style={styles.mobileNotesText}>{slide.notes}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ))}
+          </ScrollView>
+        )}
+
+        {/* Bottom Actions */}
+        <View style={styles.mobilePptxFooter}>
+          <TouchableOpacity style={styles.openExternalBtn} onPress={openExternally}>
+            <Ionicons name="open-outline" size={16} color="#475569" />
+            <Text style={styles.openExternalText}>Open in PowerPoint</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   const renderBody = () => {
     if (loading) {
       return (
@@ -673,6 +932,29 @@ export function FileViewerScreen() {
     // ---- PDF ----
     if (content.kind === "pdf" && remoteId) {
       return <DocumentPdf fileId={remoteId} />;
+    }
+
+    // ---- PPTX Presentation ----
+    if (isPresentation && currentSlides.length > 0) {
+      return renderMobilePresentation();
+    }
+
+    if (isPresentation) {
+      return (
+        <View style={styles.center}>
+          <Ionicons name="easel-outline" size={64} color="#ea580c" />
+          <Text style={[styles.emptyText, { fontWeight: "700", color: "#0f172a", marginTop: 12 }]}>
+            {file.name}
+          </Text>
+          <Text style={[styles.dim, { textAlign: "center", paddingHorizontal: 24, marginTop: 4, marginBottom: 16 }]}>
+            PowerPoint presentation. You can open it in an external viewer or ask the AI Tutor questions about it.
+          </Text>
+          <TouchableOpacity style={styles.primaryButton} onPress={openExternally}>
+            <Ionicons name="open-outline" size={20} color="white" />
+            <Text style={styles.primaryButtonText}>Open in PowerPoint</Text>
+          </TouchableOpacity>
+        </View>
+      );
     }
 
     // ---- Extracted text ----
@@ -1443,5 +1725,312 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     cursor: "pointer" as any,
+  },
+
+  /* Mobile PPTX Presentation Styles */
+  mobilePptxRoot: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  mobilePptxHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: "white",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  mobilePptxBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ffedd5",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  mobilePptxBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#c2410c",
+    letterSpacing: 0.5,
+  },
+  mobilePptxModeRow: {
+    flexDirection: "row",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 8,
+    padding: 2,
+    gap: 2,
+  },
+  mobileModeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  mobileModeBtnActive: {
+    backgroundColor: "white",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  mobileModeBtnText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  mobileModeBtnTextActive: {
+    color: "#ea580c",
+  },
+  mobileSlideCard: {
+    flex: 1,
+    backgroundColor: "white",
+    margin: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 18,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  mobileSlideCardScroll: {
+    paddingBottom: 16,
+  },
+  mobileSlideTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 16,
+    lineHeight: 24,
+  },
+  mobileSlideBullets: {
+    gap: 12,
+  },
+  mobileBulletRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  mobileBulletPoint: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#ea580c",
+    marginTop: 8,
+  },
+  mobileBulletText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 22,
+    color: "#334155",
+  },
+  mobileNotesCard: {
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#fef3c7",
+  },
+  mobileNotesTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#92400e",
+  },
+  mobileNotesText: {
+    fontSize: 12,
+    color: "#78350f",
+    lineHeight: 18,
+  },
+  mobileSlideNavControls: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "white",
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  mobileNavBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+  },
+  mobileNavBtnDisabled: {
+    opacity: 0.4,
+  },
+  mobileNavBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  mobileNavCounter: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  mobileSlidePillsBar: {
+    maxHeight: 46,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: "white",
+  },
+  mobileSlidePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginRight: 6,
+  },
+  mobileSlidePillActive: {
+    backgroundColor: "#ea580c",
+    borderColor: "#ea580c",
+  },
+  mobileSlidePillText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  mobileSlidePillTextActive: {
+    color: "white",
+  },
+  mobileDocModeScroll: {
+    padding: 16,
+    gap: 16,
+  },
+  mobileDocSlideSection: {
+    backgroundColor: "white",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  mobileDocSlideHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  mobileDocNumberBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#ea580c",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mobileDocNumberText: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  mobileDocSlideTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0f172a",
+    flex: 1,
+  },
+  mobileDocLinesContainer: {
+    gap: 8,
+  },
+  mobilePptxFooter: {
+    padding: 12,
+    alignItems: "center",
+    backgroundColor: "white",
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  openExternalBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  openExternalText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
+  },
+
+  /* Web Presentation Additional Styles */
+  webNotesBox: {
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#fef3c7",
+  },
+  webNotesTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#92400e",
+  },
+  webNotesText: {
+    fontSize: 12,
+    color: "#78350f",
+    lineHeight: 18,
+  },
+  webDocSlideBlock: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 20,
+    marginBottom: 16,
+  },
+  webDocSlideBlockHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 14,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  webDocSlideBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "#ea580c",
+  },
+  webDocSlideBadgeText: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  webDocSlideTitleText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0f172a",
   },
 });

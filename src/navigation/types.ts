@@ -10,9 +10,10 @@ export type RootStackParamList = {
   AIChat: undefined;
   Modules: undefined;
   ModuleDetail: { id: string };
-  Quiz: { moduleId?: string } | undefined;
+  Quiz: { id?: string; moduleId?: string } | undefined;
   Schedule: undefined;
   Profile: undefined;
   PDFViewer: { fileId: string };
   FileViewer: { id: string };
+  Notifications: undefined; // added for notifications screen
 };
